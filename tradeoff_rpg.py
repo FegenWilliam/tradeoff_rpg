@@ -707,207 +707,211 @@ def create_rogue_deck() -> List[Card]:
 
 def create_stat_card_pool() -> List[Card]:
     """
-    Create a pool of 300 stat cards.
-    Mix of pure upside (small bonuses) and tradeoff cards (bigger bonuses with downsides).
+    Create a pool of stat cards with 4 levels each.
+    20 different stat types × 4 levels = 80 total cards.
     """
     cards = []
 
-    # Pure upside cards (150 cards - small bonuses)
-    # HP bonuses (20 cards)
-    for i in range(20):
-        hp_values = [10, 15, 20, 25, 30]
+    # Original 10 stat types - 4 levels each
+
+    # 1. Vitality (HP) - 4 levels
+    for level in range(1, 5):
+        hp_value = level * 20
         cards.append(Card(
-            f"Vitality {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{hp_values[i % 5]} HP",
-            hp_bonus=hp_values[i % 5]
+            f"Vitality {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{hp_value} HP",
+            hp_bonus=hp_value
         ))
 
-    # Attack bonuses (20 cards)
-    for i in range(20):
-        atk_values = [2, 3, 4, 5, 6]
+    # 2. Strength (Attack) - 4 levels
+    for level in range(1, 5):
+        atk_value = level * 5
         cards.append(Card(
-            f"Strength {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{atk_values[i % 5]} Attack",
-            attack_bonus=atk_values[i % 5]
+            f"Strength {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{atk_value} Attack",
+            attack_bonus=atk_value
         ))
 
-    # Defense bonuses (20 cards)
-    for i in range(20):
-        def_values = [2, 3, 4, 5, 6]
+    # 3. Toughness (Defense) - 4 levels
+    for level in range(1, 5):
+        def_value = level * 4
         cards.append(Card(
-            f"Toughness {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{def_values[i % 5]} Defense",
-            defense_bonus=def_values[i % 5]
+            f"Toughness {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{def_value} Defense",
+            defense_bonus=def_value
         ))
 
-    # Magic Attack bonuses (15 cards)
-    for i in range(15):
-        mag_values = [3, 5, 7, 9, 11]
+    # 4. Intellect (Magic Attack) - 4 levels
+    for level in range(1, 5):
+        mag_value = level * 8
         cards.append(Card(
-            f"Intellect {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{mag_values[i % 5]} Magic Attack",
-            magic_attack_bonus=mag_values[i % 5]
+            f"Intellect {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{mag_value} Magic Attack",
+            magic_attack_bonus=mag_value
         ))
 
-    # Crit Chance bonuses (15 cards)
-    for i in range(15):
-        crit_values = [1.0, 2.0, 3.0, 4.0, 5.0]
+    # 5. Precision (Crit Chance) - 4 levels
+    for level in range(1, 5):
+        crit_value = level * 2.5
         cards.append(Card(
-            f"Precision {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{crit_values[i % 5]}% Crit Chance",
-            crit_chance_bonus=crit_values[i % 5]
+            f"Precision {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{crit_value}% Crit Chance",
+            crit_chance_bonus=crit_value
         ))
 
-    # Dodge Chance bonuses (15 cards)
-    for i in range(15):
-        dodge_values = [2.0, 3.0, 4.0, 5.0, 6.0]
+    # 6. Agility (Dodge) - 4 levels
+    for level in range(1, 5):
+        dodge_value = level * 3.0
         cards.append(Card(
-            f"Agility {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{dodge_values[i % 5]}% Dodge Chance",
-            dodge_chance_bonus=dodge_values[i % 5]
+            f"Agility {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{dodge_value}% Dodge Chance",
+            dodge_chance_bonus=dodge_value
         ))
 
-    # Mana bonuses (15 cards)
-    for i in range(15):
-        mana_values = [10, 20, 30, 40, 50]
+    # 7. Wisdom (Mana) - 4 levels
+    for level in range(1, 5):
+        mana_value = level * 30
         cards.append(Card(
-            f"Wisdom {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{mana_values[i % 5]} Mana",
-            mana_bonus=mana_values[i % 5]
+            f"Wisdom {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{mana_value} Mana",
+            mana_bonus=mana_value
         ))
 
-    # Mana Regen bonuses (10 cards)
-    for i in range(10):
-        regen_values = [2, 3, 4, 5]
+    # 8. Meditation (Mana Regen) - 4 levels
+    for level in range(1, 5):
+        regen_value = level * 3
         cards.append(Card(
-            f"Meditation {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{regen_values[i % 4]} Mana Regen",
-            mana_regen_bonus=regen_values[i % 4]
+            f"Meditation {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{regen_value} Mana Regen",
+            mana_regen_bonus=regen_value
         ))
 
-    # Luck bonuses (10 cards)
-    for i in range(10):
-        luck_values = [2, 4, 6, 8]
+    # 9. Fortune (Luck) - 4 levels
+    for level in range(1, 5):
+        luck_value = level * 5
         cards.append(Card(
-            f"Fortune {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{luck_values[i % 4]} Luck",
-            luck_bonus=luck_values[i % 4]
+            f"Fortune {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{luck_value} Luck",
+            luck_bonus=luck_value
         ))
 
-    # Attack Speed bonuses (10 cards)
-    for i in range(10):
-        speed_values = [0.1, 0.15, 0.2, 0.25]
+    # 10. Swiftness (Attack Speed) - 4 levels
+    for level in range(1, 5):
+        speed_value = level * 0.15
         cards.append(Card(
-            f"Swiftness {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{speed_values[i % 4]} Attack Speed",
-            attack_speed_bonus=speed_values[i % 4]
+            f"Swiftness {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{speed_value:.2f} Attack Speed",
+            attack_speed_bonus=speed_value
         ))
 
-    # Tradeoff cards (150 cards - bigger bonuses with downsides)
+    # NEW: 10 additional stat types - 4 levels each
 
-    # Fatal Strikes style - High crit with attack speed penalty (20 cards)
-    for i in range(20):
-        crit_chance = [3.0, 4.0, 5.0, 6.0, 7.0][i % 5]
-        crit_damage = [0.15, 0.2, 0.25, 0.3, 0.35][i % 5]
-        speed_penalty = [-0.03, -0.04, -0.05, -0.06, -0.07][i % 5]
+    # 11. Focus (Crit Damage) - 4 levels
+    for level in range(1, 5):
+        crit_dmg_value = level * 0.2
         cards.append(Card(
-            f"Fatal Strikes {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{crit_chance}% Crit Chance, +{int(crit_damage*100)}% Crit Damage, {speed_penalty} Attack Speed",
+            f"Focus {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{int(crit_dmg_value*100)}% Crit Damage",
+            crit_damage_bonus=crit_dmg_value
+        ))
+
+    # 12. Endurance (HP + Defense combo) - 4 levels
+    for level in range(1, 5):
+        hp_value = level * 15
+        def_value = level * 3
+        cards.append(Card(
+            f"Endurance {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{hp_value} HP, +{def_value} Defense",
+            hp_bonus=hp_value,
+            defense_bonus=def_value
+        ))
+
+    # 13. Power (Attack + Crit Chance combo) - 4 levels
+    for level in range(1, 5):
+        atk_value = level * 3
+        crit_value = level * 2.0
+        cards.append(Card(
+            f"Power {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{atk_value} Attack, +{crit_value}% Crit Chance",
+            attack_bonus=atk_value,
+            crit_chance_bonus=crit_value
+        ))
+
+    # 14. Fury (Attack + Attack Speed combo) - 4 levels
+    for level in range(1, 5):
+        atk_value = level * 3
+        speed_value = level * 0.1
+        cards.append(Card(
+            f"Fury {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{atk_value} Attack, +{speed_value:.2f} Attack Speed",
+            attack_bonus=atk_value,
+            attack_speed_bonus=speed_value
+        ))
+
+    # 15. Spirit (Mana + Mana Regen combo) - 4 levels
+    for level in range(1, 5):
+        mana_value = level * 25
+        regen_value = level * 2
+        cards.append(Card(
+            f"Spirit {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{mana_value} Mana, +{regen_value} Mana Regen",
+            mana_bonus=mana_value,
+            mana_regen_bonus=regen_value
+        ))
+
+    # 16. Reflex (Dodge + Attack Speed combo) - 4 levels
+    for level in range(1, 5):
+        dodge_value = level * 2.5
+        speed_value = level * 0.1
+        cards.append(Card(
+            f"Reflex {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{dodge_value}% Dodge, +{speed_value:.2f} Attack Speed",
+            dodge_chance_bonus=dodge_value,
+            attack_speed_bonus=speed_value
+        ))
+
+    # 17. Arcane (Magic Attack + Mana combo) - 4 levels
+    for level in range(1, 5):
+        mag_value = level * 6
+        mana_value = level * 20
+        cards.append(Card(
+            f"Arcane {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{mag_value} Magic Attack, +{mana_value} Mana",
+            magic_attack_bonus=mag_value,
+            mana_bonus=mana_value
+        ))
+
+    # 18. Guardian (Defense + Dodge combo) - 4 levels
+    for level in range(1, 5):
+        def_value = level * 3
+        dodge_value = level * 2.0
+        cards.append(Card(
+            f"Guardian {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{def_value} Defense, +{dodge_value}% Dodge",
+            defense_bonus=def_value,
+            dodge_chance_bonus=dodge_value
+        ))
+
+    # 19. Warrior (HP + Attack combo) - 4 levels
+    for level in range(1, 5):
+        hp_value = level * 15
+        atk_value = level * 3
+        cards.append(Card(
+            f"Warrior {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{hp_value} HP, +{atk_value} Attack",
+            hp_bonus=hp_value,
+            attack_bonus=atk_value
+        ))
+
+    # 20. Assassin (Crit Chance + Crit Damage combo) - 4 levels
+    for level in range(1, 5):
+        crit_chance = level * 2.0
+        crit_dmg = level * 0.15
+        cards.append(Card(
+            f"Assassin {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{crit_chance}% Crit Chance, +{int(crit_dmg*100)}% Crit Damage",
             crit_chance_bonus=crit_chance,
-            crit_damage_bonus=crit_damage,
-            attack_speed_bonus=speed_penalty
-        ))
-
-    # Nimble style - High dodge with slight speed (20 cards)
-    for i in range(20):
-        dodge = [8.0, 10.0, 12.0, 14.0, 16.0][i % 5]
-        speed = [0.03, 0.04, 0.05, 0.06, 0.07][i % 5]
-        cards.append(Card(
-            f"Nimble {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{dodge}% Dodge Chance, +{speed} Attack Speed",
-            dodge_chance_bonus=dodge,
-            attack_speed_bonus=speed
-        ))
-
-    # Glass Cannon - High attack, low HP (20 cards)
-    for i in range(20):
-        attack = [10, 12, 14, 16, 18][i % 5]
-        hp_penalty = [-15, -20, -25, -30, -35][i % 5]
-        cards.append(Card(
-            f"Glass Cannon {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{attack} Attack, {hp_penalty} HP",
-            attack_bonus=attack,
-            hp_bonus=hp_penalty
-        ))
-
-    # Berserker - High attack, low defense (20 cards)
-    for i in range(20):
-        attack = [8, 10, 12, 14, 16][i % 5]
-        def_penalty = [-2, -3, -4, -5, -6][i % 5]
-        cards.append(Card(
-            f"Berserker {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{attack} Attack, {def_penalty} Defense",
-            attack_bonus=attack,
-            defense_bonus=def_penalty
-        ))
-
-    # Tank - High HP and Defense, lower attack speed (15 cards)
-    for i in range(15):
-        hp = [40, 50, 60, 70, 80][i % 5]
-        defense = [5, 6, 7, 8, 9][i % 5]
-        speed_penalty = [-0.1, -0.12, -0.15, -0.18, -0.2][i % 5]
-        cards.append(Card(
-            f"Tank {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{hp} HP, +{defense} Defense, {speed_penalty} Attack Speed",
-            hp_bonus=hp,
-            defense_bonus=defense,
-            attack_speed_bonus=speed_penalty
-        ))
-
-    # Arcane Power - High magic attack, low mana regen (15 cards)
-    for i in range(15):
-        magic = [15, 20, 25, 30, 35][i % 5]
-        regen_penalty = [-2, -3, -4, -5, -6][i % 5]
-        cards.append(Card(
-            f"Arcane Power {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{magic} Magic Attack, {regen_penalty} Mana Regen",
-            magic_attack_bonus=magic,
-            mana_regen_bonus=regen_penalty
-        ))
-
-    # Evasive - High dodge, lower HP (15 cards)
-    for i in range(15):
-        dodge = [10.0, 12.0, 14.0, 16.0, 18.0][i % 5]
-        hp_penalty = [-10, -15, -20, -25, -30][i % 5]
-        cards.append(Card(
-            f"Evasive {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{dodge}% Dodge Chance, {hp_penalty} HP",
-            dodge_chance_bonus=dodge,
-            hp_bonus=hp_penalty
-        ))
-
-    # Critical Focus - High crit, lower luck (15 cards)
-    for i in range(15):
-        crit_chance = [8.0, 10.0, 12.0, 14.0, 16.0][i % 5]
-        crit_damage = [0.2, 0.25, 0.3, 0.35, 0.4][i % 5]
-        luck_penalty = [-3, -4, -5, -6, -7][i % 5]
-        cards.append(Card(
-            f"Critical Focus {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{crit_chance}% Crit Chance, +{int(crit_damage*100)}% Crit Damage, {luck_penalty} Luck",
-            crit_chance_bonus=crit_chance,
-            crit_damage_bonus=crit_damage,
-            luck_bonus=luck_penalty
-        ))
-
-    # Speed Demon - High attack speed, lower attack (10 cards)
-    for i in range(10):
-        speed = [0.3, 0.35, 0.4, 0.45, 0.5][i % 5]
-        attack_penalty = [-4, -5, -6, -7, -8][i % 5]
-        cards.append(Card(
-            f"Speed Demon {i+1}", CardType.PASSIVE, CardClass.STAT,
-            f"+{speed} Attack Speed, {attack_penalty} Attack",
-            attack_speed_bonus=speed,
-            attack_bonus=attack_penalty
+            crit_damage_bonus=crit_dmg
         ))
 
     return cards
