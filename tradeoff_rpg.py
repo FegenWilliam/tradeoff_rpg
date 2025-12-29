@@ -116,6 +116,8 @@ class Player:
         self.has_mana_conduit = False
         self.has_titans_strength = False
         self.has_arcane_tome_wielder = False
+        self.has_berserkers_rage = False
+        self.has_barrier = False
 
         # Reactive Armor state
         self.reactive_armor_active = False  # True after taking damage, gives 50% reduction on next hit
@@ -123,6 +125,12 @@ class Player:
         # Lucky 7 state
         self.lucky_7_failed_crit_rolls = 0  # Count of failed crit luck rolls
         self.lucky_7_failed_dodge_rolls = 0  # Count of failed dodge luck rolls
+
+        # Berserker's Rage state
+        self.rage_stacks = 0  # Current rage stacks (max 50)
+
+        # Barrier state
+        self.shield = 0  # Current shield value
 
         # Battle statistics
         self.monsters_killed = 0
@@ -157,6 +165,8 @@ class Player:
         self.has_mana_conduit = any(c.special_effect == "mana_conduit" for c in self.active_cards)
         self.has_titans_strength = any(c.special_effect == "titans_strength" for c in self.active_cards)
         self.has_arcane_tome_wielder = any(c.special_effect == "arcane_tome_wielder" for c in self.active_cards)
+        self.has_berserkers_rage = any(c.special_effect == "berserkers_rage" for c in self.active_cards)
+        self.has_barrier = any(c.special_effect == "barrier" for c in self.active_cards)
 
         # Calculate base bonuses (excluding unique cards with special mechanics)
         total_hp_bonus = sum(card.hp_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
@@ -213,6 +223,9 @@ class Player:
             num_tomes = min(num_tomes, 4)
             self.magic_attack = int(self.magic_attack * (1.0 + 0.25 * num_tomes))
 
+        # Berserker's Rage: -50 HP penalty (already applied via hp_bonus in card)
+        # Rage stacking is handled dynamically in combat
+
         self.current_hp = min(self.current_hp, self.max_hp)
         self.current_mana = min(self.current_mana, self.max_mana)
 
@@ -220,7 +233,7 @@ class Player:
         """
         Take damage and check if player needs to escape.
         Returns True if player escaped (hit 1 HP).
-        Handles Reactive Armor unique card effect.
+        Handles Reactive Armor and Barrier unique card effects.
         """
         actual_damage = max(1, damage - self.defense)
 
@@ -231,8 +244,24 @@ class Player:
             if not silent:
                 print(f"  🛡️ Reactive Armor reduces damage by 50%!")
 
-        self.current_hp -= actual_damage
-        self.total_damage_taken += actual_damage
+        # Barrier: Shield absorbs damage first
+        if self.shield > 0:
+            if self.shield >= actual_damage:
+                self.shield -= actual_damage
+                if not silent:
+                    print(f"  🛡️ Shield absorbed {actual_damage} damage! ({self.shield} shield remaining)")
+                actual_damage = 0
+            else:
+                remaining_damage = actual_damage - self.shield
+                if not silent:
+                    print(f"  🛡️ Shield absorbed {self.shield} damage! Shield broken!")
+                self.shield = 0
+                actual_damage = remaining_damage
+
+        # Apply damage to HP
+        if actual_damage > 0:
+            self.current_hp -= actual_damage
+            self.total_damage_taken += actual_damage
 
         # Reactive Armor: Activate for next hit (if we have the card and took damage)
         if self.has_reactive_armor and actual_damage > 0:
@@ -250,10 +279,11 @@ class Player:
         self.current_hp = min(self.current_hp + amount, self.max_hp)
 
     def get_weapon_damage(self) -> int:
-        """Calculate total damage from weapon cards."""
+        """Calculate total damage from weapon cards and rage bonus."""
         weapon_damage = sum(card.damage for card in self.active_cards
                           if card.card_type == CardType.WEAPON)
-        return self.attack + weapon_damage
+        rage_bonus = self.rage_stacks * 5 if self.has_berserkers_rage else 0
+        return self.attack + weapon_damage + rage_bonus
 
     def regenerate_mana(self):
         """Regenerate mana at the start of each turn."""
@@ -344,6 +374,8 @@ class Player:
         self.current_mana = self.max_mana
         self.dodged_last_attack = False
         self.reactive_armor_active = False  # Reset Reactive Armor between floors
+        self.rage_stacks = 0  # Reset Berserker's Rage stacks between floors
+        self.shield = 0  # Reset Barrier shield between floors
 
     def get_xp_for_next_level(self) -> int:
         """Calculate XP required to reach the next level."""
@@ -770,11 +802,18 @@ class Combat:
         Execute combat between player and enemies.
         Returns True if player wins, False if player escaped.
         """
+        # Barrier: Initialize shield at battle start
+        if player.has_barrier:
+            player.shield = int(player.magic_attack * 0.5)
+            if not silent and player.shield > 0:
+                print(f"  🛡️ Barrier activates! Shield: {player.shield}")
+
         if not silent:
             print(f"\n{'='*60}")
             print(f"FLOOR {player.current_floor} - BATTLE START!")
             print(f"{'='*60}")
-            print(f"{player.name}: {player.current_hp}/{player.max_hp} HP, {player.current_mana}/{player.max_mana} MP")
+            shield_str = f", Shield: {player.shield}" if player.shield > 0 else ""
+            print(f"{player.name}: {player.current_hp}/{player.max_hp} HP, {player.current_mana}/{player.max_mana} MP{shield_str}")
             for i, enemy in enumerate(enemies, 1):
                 print(f"  Enemy {i}: {enemy}")
             print()
@@ -836,6 +875,14 @@ class Combat:
                         attack_type = "physical"
 
                 defeated, damage_dealt = Combat._perform_attack(player, target, damage, attack_type, silent=silent)
+
+                # Berserker's Rage: Gain rage on successful physical hit
+                if player.has_berserkers_rage and attack_type == "physical" and damage_dealt > 0:
+                    if player.rage_stacks < 50:
+                        player.rage_stacks += 1
+                        if not silent:
+                            print(f"  🔥 Rage +1! (Rage: {player.rage_stacks}/50, Bonus: +{player.rage_stacks * 5} Attack)")
+
                 if defeated:
                     if not silent:
                         print(f"  ✓ {target.name} defeated!")
@@ -1161,6 +1208,62 @@ def create_stat_card_pool() -> List[Card]:
             crit_damage_bonus=crit_dmg
         ))
 
+    # 21. Reckless (Attack Speed - Defense tradeoff) - 4 levels
+    for level in range(1, 5):
+        speed_value = level * 0.25
+        def_value = level * 6
+        cards.append(Card(
+            f"Reckless {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{speed_value:.2f} Attack Speed, -{def_value} Defense",
+            attack_speed_bonus=speed_value,
+            defense_bonus=-def_value
+        ))
+
+    # 22. Tank (HP - Dodge tradeoff) - 4 levels
+    for level in range(1, 5):
+        hp_value = level * 50
+        dodge_value = level * 5.0
+        cards.append(Card(
+            f"Tank {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{hp_value} HP, -{dodge_value}% Dodge Chance",
+            hp_bonus=hp_value,
+            dodge_chance_bonus=-dodge_value
+        ))
+
+    # 23. Capacitor (Mana Regen - Mana tradeoff) - 4 levels
+    for level in range(1, 5):
+        regen_value = level * 5
+        mana_value = level * 15
+        cards.append(Card(
+            f"Capacitor {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{regen_value} Mana Regen, -{mana_value} Mana",
+            mana_regen_bonus=regen_value,
+            mana_bonus=-mana_value
+        ))
+
+    # 24. Pinpoint (Crit Chance - Attack/Magic Attack tradeoff) - 4 levels
+    for level in range(1, 5):
+        crit_value = level * 7.5
+        atk_value = level * 10
+        cards.append(Card(
+            f"Pinpoint {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{crit_value}% Crit Chance, -{atk_value} Attack, -{atk_value} Magic Attack",
+            crit_chance_bonus=crit_value,
+            attack_bonus=-atk_value,
+            magic_attack_bonus=-atk_value
+        ))
+
+    # 25. Fatal Hits (Crit Damage - Crit Chance tradeoff) - 4 levels
+    for level in range(1, 5):
+        crit_dmg_value = level * 0.5
+        crit_chance_value = level * 5.0
+        cards.append(Card(
+            f"Fatal Hits {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{int(crit_dmg_value*100)}% Crit Damage, -{crit_chance_value}% Crit Chance",
+            crit_damage_bonus=crit_dmg_value,
+            crit_chance_bonus=-crit_chance_value
+        ))
+
     return cards
 
 
@@ -1307,6 +1410,23 @@ def create_unique_card_pool() -> List[Card]:
         special_effect="arcane_tome_wielder"
     ))
 
+    # 8. Berserker's Rage (Offense Pack)
+    # Gain 1 Rage per physical hit. Rage gives +5 Attack per stack, max 50. -50 HP
+    cards.append(Card(
+        "Berserker's Rage", CardType.PASSIVE, CardClass.UNIQUE,
+        "Gain 1 Rage per physical hit. Rage: +5 Attack per stack (max 50). -50 HP",
+        hp_bonus=-50,
+        special_effect="berserkers_rage"
+    ))
+
+    # 9. Barrier (Defense Pack)
+    # Gains Shield at start of battle = 50% of Magic Attack. Shield absorbs damage before HP
+    cards.append(Card(
+        "Barrier", CardType.PASSIVE, CardClass.UNIQUE,
+        "Gain Shield at battle start equal to 50% of Magic Attack. Shield absorbs damage before HP",
+        special_effect="barrier"
+    ))
+
     return cards
 
 
@@ -1331,6 +1451,8 @@ def create_card_packs() -> dict:
         "mana_conduit": next(c for c in unique_pool if c.special_effect == "mana_conduit"),
         "titans_strength": next(c for c in unique_pool if c.special_effect == "titans_strength"),
         "arcane_tome_wielder": next(c for c in unique_pool if c.special_effect == "arcane_tome_wielder"),
+        "berserkers_rage": next(c for c in unique_pool if c.special_effect == "berserkers_rage"),
+        "barrier": next(c for c in unique_pool if c.special_effect == "barrier"),
     }
 
     # Physical Weapons Pack - all physical weapons + Titan's Strength (unique)
@@ -1353,31 +1475,31 @@ def create_card_packs() -> dict:
         "unique": []
     }
 
-    # Offense Pack - Strength, Power, Fury, Assassin (all levels, no unique)
+    # Offense Pack - Strength, Power, Fury, Assassin, Pinpoint, Fatal Hits (all levels) + Berserker's Rage (unique)
     packs["Offense"] = {
         "common": [card for card in stat_pool
-                   if any(card.name.startswith(prefix) for prefix in ["Strength", "Power", "Fury", "Assassin"])],
-        "unique": []
+                   if any(card.name.startswith(prefix) for prefix in ["Strength", "Power", "Fury", "Assassin", "Pinpoint", "Fatal Hits"])],
+        "unique": [unique_cards["berserkers_rage"]]
     }
 
-    # Defense Pack - Toughness, Endurance, Guardian (all levels) + Reactive Armor (unique)
+    # Defense Pack - Toughness, Endurance, Guardian, Tank (all levels) + Reactive Armor + Barrier (unique)
     packs["Defense"] = {
         "common": [card for card in stat_pool
-                   if any(card.name.startswith(prefix) for prefix in ["Toughness", "Endurance", "Guardian"])],
-        "unique": [unique_cards["reactive_armor"]]
+                   if any(card.name.startswith(prefix) for prefix in ["Toughness", "Endurance", "Guardian", "Tank"])],
+        "unique": [unique_cards["reactive_armor"], unique_cards["barrier"]]
     }
 
-    # Speed Pack - Swiftness, Reflex, Agility (all levels) + Unparalleled Swiftness (unique)
+    # Speed Pack - Swiftness, Reflex, Agility, Reckless (all levels) + Unparalleled Swiftness (unique)
     packs["Speed"] = {
         "common": [card for card in stat_pool
-                   if any(card.name.startswith(prefix) for prefix in ["Swiftness", "Reflex", "Agility"])],
+                   if any(card.name.startswith(prefix) for prefix in ["Swiftness", "Reflex", "Agility", "Reckless"])],
         "unique": [unique_cards["unparalleled_swiftness"]]
     }
 
-    # Magic Pack - Intellect, Wisdom, Meditation, Spirit, Arcane (all levels) + Mana Amplifier + Mana Conduit (unique)
+    # Magic Pack - Intellect, Wisdom, Meditation, Spirit, Arcane, Capacitor (all levels) + Mana Amplifier + Mana Conduit (unique)
     packs["Magic"] = {
         "common": [card for card in stat_pool
-                   if any(card.name.startswith(prefix) for prefix in ["Intellect", "Wisdom", "Meditation", "Spirit", "Arcane"])],
+                   if any(card.name.startswith(prefix) for prefix in ["Intellect", "Wisdom", "Meditation", "Spirit", "Arcane", "Capacitor"])],
         "unique": [unique_cards["mana_amplifier"], unique_cards["mana_conduit"]]
     }
 
