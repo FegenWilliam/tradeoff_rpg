@@ -138,6 +138,9 @@ class Player:
         self.current_xp = 0
         self.highest_floor = 0  # Best floor ever reached (for bonus packs)
 
+        # Currency system
+        self.bounty = 0  # Gained per monster kill, persists across runs
+
     def equip_deck(self, cards: List[Card]):
         """Equip cards before entering the tower."""
         self.deck = cards
@@ -405,6 +408,12 @@ class Player:
                 print(f"  📦 Max packs increased by +{pack_increase}! (Next run: {new_max_packs} packs)")
 
         return leveled_up
+
+    def gain_bounty(self, amount: int = 1, silent: bool = False):
+        """Gain bounty from killing a monster."""
+        self.bounty += amount
+        if not silent:
+            print(f"  💰 +{amount} Bounty! (Total: {self.bounty})")
 
     def __str__(self):
         status = "ESCAPED" if not self.is_alive else "CLIMBING"
@@ -831,6 +840,7 @@ class Combat:
                     if not silent:
                         print(f"  ✓ {target.name} defeated!")
                     player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)  # Gain 1 bounty per monster kill
                     enemies.pop(0)
                     if not enemies:
                         if not silent:
@@ -1448,6 +1458,7 @@ def print_battle_report(players: List[Player]):
         print(f"  Highest Floor Ever: {player.highest_floor}")
         print(f"  Final Level:        {player.level} ({player.current_xp}/{player.get_xp_for_next_level()} XP)")
         print(f"  Next Run Packs:     {total_packs} (Level: {level_packs}, Floor Bonus: +{floor_bonus_packs})")
+        print(f"  Bounty:             {player.bounty} 💰")
         print(f"  Floors Cleared:     {player.floors_cleared}")
         print(f"  Monsters Killed:    {player.monsters_killed}")
         print(f"  Total Damage Dealt: {player.total_damage_dealt}")
@@ -1470,12 +1481,14 @@ def print_battle_report(players: List[Player]):
     print("\n" + "="*80)
 
 
-def select_packs_interactive(level: int = 1) -> List[Card]:
+def select_packs_interactive(player: Player) -> List[Card]:
     """
     Allow player to select and open packs based on their level.
     Each pack gives 1 random card.
     Level 1: 10 packs, Level 2: 11 packs, ..., Level 20: 30 packs
+    Supports rerolling cards for 10 bounty each.
     """
+    level = player.level
     # Calculate number of packs based on level
     if level < 20:
         num_packs = 9 + level
@@ -1490,6 +1503,8 @@ def select_packs_interactive(level: int = 1) -> List[Card]:
     print("PACK SELECTION")
     print("="*60)
     print(f"Level {level}: Select {num_packs} packs to open. Each pack gives you 1 random card!")
+    print(f"Current Bounty: {player.bounty} 💰")
+    print(f"Reroll cost: 10 bounty per card")
     print()
 
     # Show pack descriptions
@@ -1514,10 +1529,27 @@ def select_packs_interactive(level: int = 1) -> List[Card]:
                 if 0 <= idx < len(pack_names):
                     pack_name = pack_names[idx]
                     card = open_pack(packs[pack_name])
-                    selected_cards.append(card)
-                    # Show if it's a unique card
+
+                    # Show the card drawn
                     unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
                     print(f"✓ Opened {pack_name}! Got: {card.name}{unique_marker}")
+                    print(f"   {card.description}")
+
+                    # Offer reroll option
+                    while player.bounty >= 10:
+                        reroll_choice = input(f"Reroll this card? (10 bounty, current: {player.bounty}) [y/n]: ").strip().lower()
+                        if reroll_choice == 'y':
+                            player.bounty -= 10
+                            card = open_pack(packs[pack_name])
+                            unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
+                            print(f"🔄 Rerolled! Got: {card.name}{unique_marker}")
+                            print(f"   {card.description}")
+                        elif reroll_choice == 'n':
+                            break
+                        else:
+                            print("Invalid input. Enter 'y' or 'n'.")
+
+                    selected_cards.append(card)
                     break
                 else:
                     print(f"Invalid choice. Enter a number between 1 and {len(pack_names)}.")
@@ -1526,11 +1558,129 @@ def select_packs_interactive(level: int = 1) -> List[Card]:
 
     print("\n" + "="*60)
     print(f"FINAL DECK ({num_packs} cards)")
+    print(f"Remaining Bounty: {player.bounty} 💰")
     print("="*60)
     for card in selected_cards:
         print(f"  - {card.name}")
 
     return selected_cards
+
+
+def create_bounty_shop_inventory() -> List[Tuple[Card, int]]:
+    """
+    Create the bounty shop inventory with cards and their prices.
+    Returns a list of (Card, price) tuples.
+    Minimum 3 weapon cards at 10 bounty each.
+    Other cards priced 20-40 bounty based on impact.
+    """
+    inventory = []
+    stat_pool = create_stat_card_pool()
+    equipment_pool = create_equipment_card_pool()
+    unique_pool = create_unique_card_pool()
+
+    # Weapons: 10 bounty each (at least 3)
+    weapons = [card for card in equipment_pool if card.card_type == CardType.WEAPON]
+    for weapon in weapons:
+        inventory.append((weapon, 10))
+
+    # Armor: 20 bounty each
+    armors = [card for card in equipment_pool if card.card_type == CardType.ARMOR]
+    for armor in armors[:3]:  # Add 3 armors
+        inventory.append((armor, 20))
+
+    # Low-tier stat cards (Level 1-2): 20 bounty
+    low_stat_cards = [card for card in stat_pool if any(card.name.endswith(f" {level}") for level in [1, 2])]
+    for card in random.sample(low_stat_cards, min(5, len(low_stat_cards))):
+        inventory.append((card, 20))
+
+    # Mid-tier stat cards (Level 3): 30 bounty
+    mid_stat_cards = [card for card in stat_pool if card.name.endswith(" 3")]
+    for card in random.sample(mid_stat_cards, min(3, len(mid_stat_cards))):
+        inventory.append((card, 30))
+
+    # High-tier stat cards (Level 4): 40 bounty
+    high_stat_cards = [card for card in stat_pool if card.name.endswith(" 4")]
+    for card in random.sample(high_stat_cards, min(2, len(high_stat_cards))):
+        inventory.append((card, 40))
+
+    # Unique cards: 40 bounty (only 1-2 random unique cards)
+    for unique_card in random.sample(unique_pool, min(2, len(unique_pool))):
+        inventory.append((unique_card, 40))
+
+    return inventory
+
+
+def bounty_shop_interactive(player: Player) -> List[Card]:
+    """
+    Interactive bounty shop where players can buy cards for bounty.
+    Returns list of purchased cards.
+    """
+    inventory = create_bounty_shop_inventory()
+    purchased_cards = []
+
+    print("\n" + "="*60)
+    print("💰 BOUNTY SHOP 💰")
+    print("="*60)
+    print(f"Welcome, {player.name}!")
+    print(f"Your Bounty: {player.bounty}")
+    print("\nCards bought here are ONLY for the next tower run!")
+    print("Weapon limits still apply (staff is two-handed, etc.)")
+    print()
+
+    while True:
+        print("\n" + "-"*60)
+        print("SHOP INVENTORY:")
+        print("-"*60)
+        print(f"{'#':<4} {'Card':<30} {'Type':<12} {'Price':<8}")
+        print("-"*60)
+
+        for i, (card, price) in enumerate(inventory, 1):
+            unique_marker = " ✨" if card.card_class == CardClass.UNIQUE else ""
+            print(f"{i:<4} {card.name:<30} {card.card_type.value:<12} {price} 💰{unique_marker}")
+
+        print("-"*60)
+        print(f"Your Bounty: {player.bounty} 💰")
+        print(f"Purchased so far: {len(purchased_cards)} cards")
+        print()
+
+        choice = input("Enter card # to buy (or 'done' to finish shopping): ").strip().lower()
+
+        if choice == 'done':
+            break
+
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(inventory):
+                card, price = inventory[idx]
+
+                if player.bounty >= price:
+                    confirm = input(f"Buy '{card.name}' for {price} bounty? [y/n]: ").strip().lower()
+                    if confirm == 'y':
+                        player.bounty -= price
+                        purchased_cards.append(card)
+                        print(f"✓ Purchased {card.name}!")
+                        print(f"   {card.description}")
+                        # Remove from inventory (can only buy once)
+                        inventory.pop(idx)
+                else:
+                    print(f"Not enough bounty! Need {price}, have {player.bounty}")
+            else:
+                print(f"Invalid choice. Enter a number between 1 and {len(inventory)}.")
+        except ValueError:
+            print("Invalid input. Enter a number or 'done'.")
+
+    print("\n" + "="*60)
+    print(f"PURCHASE COMPLETE")
+    print(f"Remaining Bounty: {player.bounty} 💰")
+    print(f"Purchased {len(purchased_cards)} cards for next run")
+    print("="*60)
+
+    if purchased_cards:
+        print("\nPurchased cards:")
+        for card in purchased_cards:
+            print(f"  - {card.name}")
+
+    return purchased_cards
 
 
 def main():
@@ -1550,8 +1700,14 @@ def main():
         name = input(f"Enter name for Player {i+1}: ")
         player = Player(name)
 
+        # Visit bounty shop first
+        shop_cards = bounty_shop_interactive(player)
+
         # Select and open packs to build deck (based on player level)
-        deck = select_packs_interactive(player.level)
+        pack_cards = select_packs_interactive(player)
+
+        # Combine shop cards and pack cards for the deck
+        deck = shop_cards + pack_cards
 
         player.equip_deck(deck)
         players.append(player)
