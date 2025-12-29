@@ -30,6 +30,7 @@ class WeaponType(Enum):
     SWORD = "sword"  # Can dual wield by default
     WAND = "wand"  # Can dual wield by default
     SHIELD = "shield"  # Can dual wield by default (secondary weapon)
+    QUIVER = "quiver"  # Can dual wield by default (secondary weapon for bows)
     GREATSWORD = "greatsword"  # Requires Titan's Strength for dual wield
     AXE = "axe"  # Requires Titan's Strength for dual wield
     SPEAR = "spear"  # Requires Titan's Strength for dual wield
@@ -233,8 +234,8 @@ class Player:
                 continue  # Single weapon is always OK
 
             # Check dual wielding rules
-            if weapon_type in [WeaponType.SWORD, WeaponType.WAND, WeaponType.SHIELD]:
-                # Swords, Wands, and Shields can always be dual wielded
+            if weapon_type in [WeaponType.SWORD, WeaponType.WAND, WeaponType.SHIELD, WeaponType.QUIVER]:
+                # Swords, Wands, Shields, and Quivers can always be dual wielded
                 if count > 2:
                     errors.append(f"Cannot equip more than 2 {weapon_type.value}s (found {count})")
 
@@ -1442,13 +1443,14 @@ def create_equipment_card_pool() -> List[Card]:
     """
     cards = []
 
-    # Weapons - Base Attack (5 cards)
+    # Weapons - Base Attack (6 cards)
     weapons = [
         ("Sword", 60, "A balanced weapon for physical combat", WeaponType.SWORD, 1.0),
         ("Greatsword", 140, "A powerful two-handed weapon, deals high damage", WeaponType.GREATSWORD, 0.7),
         ("Dagger", 40, "A quick weapon for fast strikes", WeaponType.DAGGER, 1.5),
         ("Axe", 90, "A heavy weapon with crushing power", WeaponType.AXE, 0.9),
         ("Spear", 60, "A reach weapon with good attack", WeaponType.SPEAR, 1.2),
+        ("Bow", 55, "A ranged weapon for precise strikes", WeaponType.BOW, 1.1),
     ]
     for name, attack, desc, wtype, aspd in weapons:
         cards.append(Card(
@@ -1474,13 +1476,20 @@ def create_equipment_card_pool() -> List[Card]:
             attack_speed_bonus=aspd
         ))
 
-    # Secondary Weapons - Defensive (1 card)
+    # Secondary Weapons (2 cards)
     cards.append(Card(
         "Shield", CardType.WEAPON, CardClass.EQUIPMENT,
         "A sturdy shield for defense",
         defense_bonus=10,
         weapon_type=WeaponType.SHIELD,
         attack_speed_bonus=1.0
+    ))
+    cards.append(Card(
+        "Quiver", CardType.WEAPON, CardClass.EQUIPMENT,
+        "A quiver of arrows that enhances bow attacks",
+        attack_bonus=20,
+        weapon_type=WeaponType.QUIVER,
+        attack_speed_bonus=0.2
     ))
 
     # Armor - Base Defense (4 cards)
