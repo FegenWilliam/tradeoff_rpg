@@ -124,6 +124,15 @@ class Player:
         self.lucky_7_failed_crit_rolls = 0  # Count of failed crit luck rolls
         self.lucky_7_failed_dodge_rolls = 0  # Count of failed dodge luck rolls
 
+        # Battle statistics
+        self.monsters_killed = 0
+        self.total_damage_dealt = 0
+        self.total_damage_taken = 0
+        self.floors_cleared = 0
+        self.total_turns_in_combat = 0
+        self.crits_landed = 0
+        self.dodges_made = 0
+
     def equip_deck(self, cards: List[Card]):
         """Equip cards before entering the tower."""
         self.deck = cards
@@ -199,7 +208,7 @@ class Player:
         self.current_hp = min(self.current_hp, self.max_hp)
         self.current_mana = min(self.current_mana, self.max_mana)
 
-    def take_damage(self, damage: int) -> bool:
+    def take_damage(self, damage: int, silent: bool = False) -> bool:
         """
         Take damage and check if player needs to escape.
         Returns True if player escaped (hit 1 HP).
@@ -211,9 +220,11 @@ class Player:
         if self.has_reactive_armor and self.reactive_armor_active:
             actual_damage = int(actual_damage * 0.5)
             self.reactive_armor_active = False  # Consumed the protection
-            print(f"  🛡️ Reactive Armor reduces damage by 50%!")
+            if not silent:
+                print(f"  🛡️ Reactive Armor reduces damage by 50%!")
 
         self.current_hp -= actual_damage
+        self.total_damage_taken += actual_damage
 
         # Reactive Armor: Activate for next hit (if we have the card and took damage)
         if self.has_reactive_armor and actual_damage > 0:
@@ -240,7 +251,7 @@ class Player:
         """Regenerate mana at the start of each turn."""
         self.current_mana = min(self.current_mana + self.mana_regen, self.max_mana)
 
-    def can_dodge(self) -> bool:
+    def can_dodge(self, silent: bool = False) -> bool:
         """Check if player can dodge (can't dodge twice in a row). Handles Lucky 7."""
         if self.dodged_last_attack:
             return False
@@ -250,7 +261,8 @@ class Player:
         if self.has_lucky_7 and self.lucky_7_failed_dodge_rolls >= 7:
             lucky_7_guaranteed = True
             self.lucky_7_failed_dodge_rolls = 0  # Reset counter
-            print(f"  🎰 Lucky 7 activates! Luck roll guaranteed!")
+            if not silent:
+                print(f"  🎰 Lucky 7 activates! Luck roll guaranteed!")
 
         # Use luck to potentially roll twice
         luck_triggered = False
@@ -274,9 +286,11 @@ class Player:
             success = random.randint(1, 100) <= self.dodge_chance
 
         self.dodged_last_attack = success
+        if success:
+            self.dodges_made += 1
         return success
 
-    def calculate_damage(self, base_damage: int) -> Tuple[int, bool]:
+    def calculate_damage(self, base_damage: int, silent: bool = False) -> Tuple[int, bool]:
         """
         Calculate damage with crit chance. Handles Lucky 7.
         Returns (damage, is_crit).
@@ -286,7 +300,8 @@ class Player:
         if self.has_lucky_7 and self.lucky_7_failed_crit_rolls >= 7:
             lucky_7_guaranteed = True
             self.lucky_7_failed_crit_rolls = 0  # Reset counter
-            print(f"  🎰 Lucky 7 activates! Luck roll guaranteed!")
+            if not silent:
+                print(f"  🎰 Lucky 7 activates! Luck roll guaranteed!")
 
         # Check for crit with luck
         is_crit = False
@@ -311,6 +326,7 @@ class Player:
             is_crit = random.randint(1, 100) <= self.crit_chance
 
         if is_crit:
+            self.crits_landed += 1
             return int(base_damage * self.crit_damage), True
         return base_damage, False
 
@@ -545,7 +561,7 @@ class Enemy:
         if self.max_mana > 0:
             self.current_mana = min(self.current_mana + self.mana_regen, self.max_mana)
 
-    def can_dodge(self) -> bool:
+    def can_dodge(self, silent: bool = False) -> bool:
         """Check if enemy can dodge (can't dodge twice in a row)."""
         if self.dodged_last_attack:
             return False
@@ -625,51 +641,72 @@ class Combat:
     Combat system for player vs enemies with full RPG mechanics.
     """
     @staticmethod
-    def _perform_attack(attacker, defender, damage: int, attack_type: str = "physical") -> bool:
+    def _perform_attack(attacker, defender, damage: int, attack_type: str = "physical", silent: bool = False) -> Tuple[bool, int]:
         """
         Perform a single attack with dodge and crit mechanics.
-        Returns True if defender was defeated.
+        Returns (defender_defeated, actual_damage_dealt).
         """
         attacker_name = attacker.name if hasattr(attacker, 'name') else str(attacker)
         defender_name = defender.name if hasattr(defender, 'name') else str(defender)
 
         # Check if defender dodges
-        if defender.can_dodge():
-            print(f"  💨 {defender_name} DODGED the attack!")
-            return False
+        dodged = defender.can_dodge(silent=silent)
+
+        if dodged:
+            if not silent:
+                print(f"  💨 {defender_name} DODGED the attack!")
+            return False, 0
 
         # If attack wasn't dodged, reset the dodge flag
         defender.dodged_last_attack = False
 
         # Calculate damage with crit
-        final_damage, is_crit = attacker.calculate_damage(damage)
+        # Player has silent parameter, Enemy doesn't
+        if hasattr(attacker, 'total_damage_dealt'):
+            final_damage, is_crit = attacker.calculate_damage(damage, silent=silent)
+        else:
+            final_damage, is_crit = attacker.calculate_damage(damage)
 
         # Display attack
-        crit_marker = " 💥 CRITICAL HIT!" if is_crit else ""
-        type_marker = "⚡" if attack_type == "magic" else "⚔️"
-        print(f"  {type_marker} {attacker_name} attacks {defender_name} for {final_damage} damage!{crit_marker}")
+        if not silent:
+            crit_marker = " 💥 CRITICAL HIT!" if is_crit else ""
+            type_marker = "⚡" if attack_type == "magic" else "⚔️"
+            print(f"  {type_marker} {attacker_name} attacks {defender_name} for {final_damage} damage!{crit_marker}")
+
+        # Track damage dealt for players
+        if hasattr(attacker, 'total_damage_dealt'):
+            attacker.total_damage_dealt += final_damage
 
         # Apply damage
-        return defender.take_damage(final_damage)
+        # Player has silent parameter, Enemy doesn't
+        if hasattr(defender, 'total_damage_taken'):
+            defeated = defender.take_damage(final_damage, silent=silent)
+        else:
+            defeated = defender.take_damage(final_damage)
+
+        return defeated, final_damage
 
     @staticmethod
-    def battle(player: Player, enemies: List[Enemy]) -> bool:
+    def battle(player: Player, enemies: List[Enemy], silent: bool = False) -> bool:
         """
         Execute combat between player and enemies.
         Returns True if player wins, False if player escaped.
         """
-        print(f"\n{'='*60}")
-        print(f"FLOOR {player.current_floor} - BATTLE START!")
-        print(f"{'='*60}")
-        print(f"{player.name}: {player.current_hp}/{player.max_hp} HP, {player.current_mana}/{player.max_mana} MP")
-        for i, enemy in enumerate(enemies, 1):
-            print(f"  Enemy {i}: {enemy}")
-        print()
+        if not silent:
+            print(f"\n{'='*60}")
+            print(f"FLOOR {player.current_floor} - BATTLE START!")
+            print(f"{'='*60}")
+            print(f"{player.name}: {player.current_hp}/{player.max_hp} HP, {player.current_mana}/{player.max_mana} MP")
+            for i, enemy in enumerate(enemies, 1):
+                print(f"  Enemy {i}: {enemy}")
+            print()
 
         turn = 0
         while enemies and player.is_alive:
             turn += 1
-            print(f"--- Turn {turn} ---")
+            player.total_turns_in_combat += 1
+            if not silent:
+                print(f"--- Turn {turn} ---")
 
             # Regenerate mana
             player.regenerate_mana()
@@ -697,10 +734,12 @@ class Combat:
                         damage = player.magic_attack * 3
                         player.current_mana -= mana_cost
                         attack_type = "magic"
-                        print(f"  ⚡ Mana Amplifier: Consuming {mana_cost} mana for 3x magic damage!")
+                        if not silent:
+                            print(f"  ⚡ Mana Amplifier: Consuming {mana_cost} mana for 3x magic damage!")
                     else:
                         # Not enough mana for Mana Amplifier, skip attack
-                        print(f"  ⚠️ Not enough mana for Mana Amplifier! ({player.current_mana}/{mana_cost})")
+                        if not silent:
+                            print(f"  ⚠️ Not enough mana for Mana Amplifier! ({player.current_mana}/{mana_cost})")
                         continue
                 else:
                     # Normal attack logic
@@ -718,11 +757,16 @@ class Combat:
                         damage = player.get_weapon_damage()
                         attack_type = "physical"
 
-                if Combat._perform_attack(player, target, damage, attack_type):
-                    print(f"  ✓ {target.name} defeated!")
+                defeated, damage_dealt = Combat._perform_attack(player, target, damage, attack_type, silent=silent)
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
                     enemies.pop(0)
                     if not enemies:
-                        print(f"\n🎉 {player.name} wins the battle!")
+                        if not silent:
+                            print(f"\n🎉 {player.name} wins the battle!")
+                        player.floors_cleared += 1
                         return True
 
             # Enemies turn
@@ -748,12 +792,15 @@ class Combat:
                         damage = enemy.attack
                         attack_type = "physical"
 
-                    if Combat._perform_attack(enemy, player, damage, attack_type):
-                        print(f"\n💀 {player.name} HP dropped to 1! AUTO-ESCAPE activated!")
-                        print(f"🏃 {player.name} escaped from floor {player.current_floor}.")
+                    defeated, damage_dealt = Combat._perform_attack(enemy, player, damage, attack_type, silent=silent)
+                    if defeated:
+                        if not silent:
+                            print(f"\n💀 {player.name} HP dropped to 1! AUTO-ESCAPE activated!")
+                            print(f"🏃 {player.name} escaped from floor {player.current_floor}.")
                         return False
 
-            print(f"📊 {player.name}: {player.current_hp}/{player.max_hp} HP, {player.current_mana}/{player.max_mana} MP\n")
+            if not silent:
+                print(f"📊 {player.name}: {player.current_hp}/{player.max_hp} HP, {player.current_mana}/{player.max_mana} MP\n")
 
         return True
 
@@ -1287,6 +1334,62 @@ def open_pack(pack_data: dict) -> Card:
     return random.choice(common_cards)
 
 
+def print_battle_report(players: List[Player]):
+    """
+    Print a detailed battle report for all players.
+    Shows floors reached, monsters killed, damage dealt/taken, etc.
+    """
+    print("\n" + "="*80)
+    print("BATTLE REPORT - AUTO-SIMULATION COMPLETE")
+    print("="*80)
+    print()
+
+    # Sort players by floors reached (descending)
+    sorted_players = sorted(players, key=lambda p: p.current_floor, reverse=True)
+
+    # Print summary table
+    print("FINAL STANDINGS:")
+    print("-" * 80)
+    print(f"{'Rank':<6} {'Player':<20} {'Floor':<8} {'Status':<15} {'Monsters':<10} {'Dmg Dealt':<12}")
+    print("-" * 80)
+
+    for i, player in enumerate(sorted_players, 1):
+        status = f"Escaped" if player.escaped_floor else "Victorious"
+        print(f"{i:<6} {player.name:<20} {player.current_floor:<8} {status:<15} {player.monsters_killed:<10} {player.total_damage_dealt:<12}")
+
+    print("-" * 80)
+    print()
+
+    # Detailed stats for each player
+    print("DETAILED STATISTICS:")
+    print("="*80)
+
+    for player in sorted_players:
+        print(f"\n{player.name}:")
+        print(f"  Final Floor:        {player.current_floor}")
+        print(f"  Status:             {'Escaped at floor ' + str(player.escaped_floor) if player.escaped_floor else 'Reached the top!'}")
+        print(f"  Floors Cleared:     {player.floors_cleared}")
+        print(f"  Monsters Killed:    {player.monsters_killed}")
+        print(f"  Total Damage Dealt: {player.total_damage_dealt}")
+        print(f"  Total Damage Taken: {player.total_damage_taken}")
+        print(f"  Total Turns:        {player.total_turns_in_combat}")
+        print(f"  Critical Hits:      {player.crits_landed}")
+        print(f"  Dodges:             {player.dodges_made}")
+
+        # Calculate averages
+        if player.total_turns_in_combat > 0:
+            avg_dmg_per_turn = player.total_damage_dealt / player.total_turns_in_combat
+            print(f"  Avg Dmg/Turn:       {avg_dmg_per_turn:.1f}")
+
+        if player.floors_cleared > 0:
+            avg_turns_per_floor = player.total_turns_in_combat / player.floors_cleared
+            avg_monsters_per_floor = player.monsters_killed / player.floors_cleared
+            print(f"  Avg Turns/Floor:    {avg_turns_per_floor:.1f}")
+            print(f"  Avg Monsters/Floor: {avg_monsters_per_floor:.1f}")
+
+    print("\n" + "="*80)
+
+
 def select_packs_interactive() -> List[Card]:
     """
     Allow player to select and open 10 packs.
@@ -1367,19 +1470,24 @@ def main():
         players.append(player)
 
     print("\n" + "="*60)
-    print("ENTERING THE TOWER")
+    print("PREP PHASE COMPLETE - ENTERING AUTO-BATTLE MODE")
     print("="*60)
+    print("\nAll players will now automatically enter the tower.")
+    print("Battles will be simulated and results reported at the end.")
+    print("\nSimulating battles...")
+    print()
 
-    # Tower climbing
+    # Tower climbing - AUTO-BATTLE MODE
     tower = Tower()
     active_players = players.copy()
 
     while active_players:
         floor = active_players[0].current_floor + 1
 
-        print(f"\n{'#'*60}")
-        print(f"FLOOR {floor}")
-        print(f"{'#'*60}")
+        # Show progress every 10 floors
+        if floor % 10 == 0 or floor == 1:
+            player_status = ", ".join([f"{p.name} (Floor {p.current_floor})" for p in active_players])
+            print(f"  Floor {floor}: {player_status}")
 
         # Each active player attempts this floor
         for player in active_players[:]:  # Copy list to modify during iteration
@@ -1388,35 +1496,27 @@ def main():
             # Generate enemies for this floor
             enemies = tower.generate_enemies(floor)
 
-            # Battle
-            won = Combat.battle(player, enemies)
+            # Battle - SILENT MODE
+            won = Combat.battle(player, enemies, silent=True)
 
             if won:
                 # Player beat the floor
                 player.reset_for_floor()  # Heal for next floor
-                print(f"{player.name} advances to floor {floor + 1}!")
             else:
                 # Player escaped
                 active_players.remove(player)
-                print(f"{player.name} is out of the competition!")
+                print(f"  ⚠️  {player.name} escaped at floor {player.current_floor}!")
 
         # Check if we've reached the top or all players are out
         if not active_players:
             break
 
         if floor >= Tower.MAX_FLOORS:
-            print("\nTOP OF THE TOWER REACHED!")
+            print("\n  🎉 TOP OF THE TOWER REACHED!")
             break
 
-    # Final results
-    print("\n" + "="*60)
-    print("FINAL RESULTS")
-    print("="*60)
-
-    players.sort(key=lambda p: p.current_floor, reverse=True)
-    for i, player in enumerate(players, 1):
-        status = f"ESCAPED at floor {player.escaped_floor}" if player.escaped_floor else "VICTORIOUS"
-        print(f"{i}. {player.name} - Floor {player.current_floor} ({status})")
+    # Final results - BATTLE REPORT
+    print_battle_report(players)
 
 
 if __name__ == "__main__":
