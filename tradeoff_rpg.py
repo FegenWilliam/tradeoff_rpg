@@ -108,6 +108,22 @@ class Player:
         self.deck: List[Card] = []
         self.active_cards: List[Card] = []
 
+        # Unique card special effects tracking
+        self.has_unparalleled_swiftness = False
+        self.has_reactive_armor = False
+        self.has_lucky_7 = False
+        self.has_mana_amplifier = False
+        self.has_mana_conduit = False
+        self.has_titans_strength = False
+        self.has_arcane_tome_wielder = False
+
+        # Reactive Armor state
+        self.reactive_armor_active = False  # True after taking damage, gives 50% reduction on next hit
+
+        # Lucky 7 state
+        self.lucky_7_failed_crit_rolls = 0  # Count of failed crit luck rolls
+        self.lucky_7_failed_dodge_rolls = 0  # Count of failed dodge luck rolls
+
     def equip_deck(self, cards: List[Card]):
         """Equip cards before entering the tower."""
         self.deck = cards
@@ -115,19 +131,30 @@ class Player:
         self._apply_card_bonuses()
 
     def _apply_card_bonuses(self):
-        """Apply all stat bonuses from equipped cards."""
-        total_hp_bonus = sum(card.hp_bonus for card in self.active_cards)
-        total_attack_bonus = sum(card.attack_bonus for card in self.active_cards)
-        total_defense_bonus = sum(card.defense_bonus for card in self.active_cards)
-        total_magic_attack_bonus = sum(card.magic_attack_bonus for card in self.active_cards)
-        total_mana_bonus = sum(card.mana_bonus for card in self.active_cards)
-        total_mana_regen_bonus = sum(card.mana_regen_bonus for card in self.active_cards)
-        total_crit_chance_bonus = sum(card.crit_chance_bonus for card in self.active_cards)
-        total_crit_damage_bonus = sum(card.crit_damage_bonus for card in self.active_cards)
-        total_dodge_chance_bonus = sum(card.dodge_chance_bonus for card in self.active_cards)
-        total_attack_speed_bonus = sum(card.attack_speed_bonus for card in self.active_cards)
-        total_luck_bonus = sum(card.luck_bonus for card in self.active_cards)
+        """Apply all stat bonuses from equipped cards, including unique card effects."""
+        # First, detect which unique cards are equipped
+        self.has_unparalleled_swiftness = any(c.special_effect == "unparalleled_swiftness" for c in self.active_cards)
+        self.has_reactive_armor = any(c.special_effect == "reactive_armor" for c in self.active_cards)
+        self.has_lucky_7 = any(c.special_effect == "lucky_7" for c in self.active_cards)
+        self.has_mana_amplifier = any(c.special_effect == "mana_amplifier" for c in self.active_cards)
+        self.has_mana_conduit = any(c.special_effect == "mana_conduit" for c in self.active_cards)
+        self.has_titans_strength = any(c.special_effect == "titans_strength" for c in self.active_cards)
+        self.has_arcane_tome_wielder = any(c.special_effect == "arcane_tome_wielder" for c in self.active_cards)
 
+        # Calculate base bonuses (excluding unique cards with special mechanics)
+        total_hp_bonus = sum(card.hp_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_attack_bonus = sum(card.attack_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_defense_bonus = sum(card.defense_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_magic_attack_bonus = sum(card.magic_attack_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_mana_bonus = sum(card.mana_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_mana_regen_bonus = sum(card.mana_regen_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_crit_chance_bonus = sum(card.crit_chance_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_crit_damage_bonus = sum(card.crit_damage_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_dodge_chance_bonus = sum(card.dodge_chance_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_attack_speed_bonus = sum(card.attack_speed_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_luck_bonus = sum(card.luck_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+
+        # Apply base stats
         self.max_hp = self.base_hp + total_hp_bonus
         self.attack = self.base_attack + total_attack_bonus
         self.defense = self.base_defense + total_defense_bonus
@@ -140,6 +167,35 @@ class Player:
         self.attack_speed = self.base_attack_speed + total_attack_speed_bonus
         self.luck = self.base_luck + total_luck_bonus
 
+        # Apply unique card effects
+        # Unparalleled Swiftness: -30% damage, -30% magic damage, +3 attack speed
+        if self.has_unparalleled_swiftness:
+            self.attack = int(self.attack * 0.7)
+            self.magic_attack = int(self.magic_attack * 0.7)
+            self.attack_speed += 3.0
+
+        # Reactive Armor: -90% magic damage
+        if self.has_reactive_armor:
+            self.magic_attack = int(self.magic_attack * 0.1)
+
+        # Mana Conduit: -100% attack, +25% max mana regen
+        if self.has_mana_conduit:
+            self.attack = 0
+            self.mana_regen += int(self.max_mana * 0.25)
+
+        # Titan's Strength: halve attack speed bonuses (only the bonus part, not base)
+        if self.has_titans_strength:
+            bonus_speed = self.attack_speed - self.base_attack_speed
+            self.attack_speed = self.base_attack_speed + (bonus_speed * 0.5)
+
+        # Arcane Tome Wielder: -100% attack, +25% magic attack per tome equipped
+        if self.has_arcane_tome_wielder:
+            self.attack = 0
+            num_tomes = sum(1 for card in self.active_cards if card.name == "Tome")
+            # Ensure max 4 tomes count (validation should be done elsewhere)
+            num_tomes = min(num_tomes, 4)
+            self.magic_attack = int(self.magic_attack * (1.0 + 0.25 * num_tomes))
+
         self.current_hp = min(self.current_hp, self.max_hp)
         self.current_mana = min(self.current_mana, self.max_mana)
 
@@ -147,9 +203,21 @@ class Player:
         """
         Take damage and check if player needs to escape.
         Returns True if player escaped (hit 1 HP).
+        Handles Reactive Armor unique card effect.
         """
         actual_damage = max(1, damage - self.defense)
+
+        # Reactive Armor: Apply 50% reduction if active
+        if self.has_reactive_armor and self.reactive_armor_active:
+            actual_damage = int(actual_damage * 0.5)
+            self.reactive_armor_active = False  # Consumed the protection
+            print(f"  🛡️ Reactive Armor reduces damage by 50%!")
+
         self.current_hp -= actual_damage
+
+        # Reactive Armor: Activate for next hit (if we have the card and took damage)
+        if self.has_reactive_armor and actual_damage > 0:
+            self.reactive_armor_active = True
 
         if self.current_hp <= 1:
             self.current_hp = 1
@@ -173,12 +241,31 @@ class Player:
         self.current_mana = min(self.current_mana + self.mana_regen, self.max_mana)
 
     def can_dodge(self) -> bool:
-        """Check if player can dodge (can't dodge twice in a row)."""
+        """Check if player can dodge (can't dodge twice in a row). Handles Lucky 7."""
         if self.dodged_last_attack:
             return False
 
+        # Lucky 7: Check if we should guarantee the luck roll
+        lucky_7_guaranteed = False
+        if self.has_lucky_7 and self.lucky_7_failed_dodge_rolls >= 7:
+            lucky_7_guaranteed = True
+            self.lucky_7_failed_dodge_rolls = 0  # Reset counter
+            print(f"  🎰 Lucky 7 activates! Luck roll guaranteed!")
+
         # Use luck to potentially roll twice
-        if self.luck > 0 and random.randint(1, 100) <= self.luck:
+        luck_triggered = False
+        if self.luck > 0:
+            if lucky_7_guaranteed:
+                luck_triggered = True
+            else:
+                luck_roll = random.randint(1, 100)
+                luck_triggered = luck_roll <= self.luck
+
+                # Track failed luck rolls for Lucky 7
+                if not luck_triggered and self.has_lucky_7:
+                    self.lucky_7_failed_dodge_rolls += 1
+
+        if luck_triggered:
             # Roll twice, take the better result
             roll1 = random.randint(1, 100)
             roll2 = random.randint(1, 100)
@@ -191,13 +278,32 @@ class Player:
 
     def calculate_damage(self, base_damage: int) -> Tuple[int, bool]:
         """
-        Calculate damage with crit chance.
+        Calculate damage with crit chance. Handles Lucky 7.
         Returns (damage, is_crit).
         """
+        # Lucky 7: Check if we should guarantee the luck roll
+        lucky_7_guaranteed = False
+        if self.has_lucky_7 and self.lucky_7_failed_crit_rolls >= 7:
+            lucky_7_guaranteed = True
+            self.lucky_7_failed_crit_rolls = 0  # Reset counter
+            print(f"  🎰 Lucky 7 activates! Luck roll guaranteed!")
+
         # Check for crit with luck
         is_crit = False
-        if self.luck > 0 and random.randint(1, 100) <= self.luck:
-            # Roll twice, take the better result
+        luck_triggered = False
+        if self.luck > 0:
+            if lucky_7_guaranteed:
+                luck_triggered = True
+            else:
+                luck_roll = random.randint(1, 100)
+                luck_triggered = luck_roll <= self.luck
+
+                # Track failed luck rolls for Lucky 7
+                if not luck_triggered and self.has_lucky_7:
+                    self.lucky_7_failed_crit_rolls += 1
+
+        if luck_triggered:
+            # Roll twice, take the better result (min for crit because lower is better)
             roll1 = random.randint(1, 100)
             roll2 = random.randint(1, 100)
             is_crit = min(roll1, roll2) <= self.crit_chance
@@ -213,6 +319,7 @@ class Player:
         self.current_hp = self.max_hp
         self.current_mana = self.max_mana
         self.dodged_last_attack = False
+        self.reactive_armor_active = False  # Reset Reactive Armor between floors
 
     def __str__(self):
         status = "ESCAPED" if not self.is_alive else "CLIMBING"
@@ -583,19 +690,33 @@ class Combat:
 
                 target = enemies[0]
 
-                # Decide between physical and magic attack
-                # Use magic if we have mana and magic attack is higher
-                use_magic = (player.magic_attack > 0 and
-                           player.current_mana >= 20 and
-                           player.magic_attack > player.get_weapon_damage())
-
-                if use_magic:
-                    damage = player.magic_attack
-                    player.current_mana -= 20
-                    attack_type = "magic"
+                # Mana Amplifier: Special attack mechanic
+                if player.has_mana_amplifier:
+                    mana_cost = int(player.max_mana * 0.5)
+                    if player.current_mana >= mana_cost:
+                        damage = player.magic_attack * 3
+                        player.current_mana -= mana_cost
+                        attack_type = "magic"
+                        print(f"  ⚡ Mana Amplifier: Consuming {mana_cost} mana for 3x magic damage!")
+                    else:
+                        # Not enough mana for Mana Amplifier, skip attack
+                        print(f"  ⚠️ Not enough mana for Mana Amplifier! ({player.current_mana}/{mana_cost})")
+                        continue
                 else:
-                    damage = player.get_weapon_damage()
-                    attack_type = "physical"
+                    # Normal attack logic
+                    # Decide between physical and magic attack
+                    # Use magic if we have mana and magic attack is higher
+                    use_magic = (player.magic_attack > 0 and
+                               player.current_mana >= 20 and
+                               player.magic_attack > player.get_weapon_damage())
+
+                    if use_magic:
+                        damage = player.magic_attack
+                        player.current_mana -= 20
+                        attack_type = "magic"
+                    else:
+                        damage = player.get_weapon_damage()
+                        attack_type = "physical"
 
                 if Combat._perform_attack(player, target, damage, attack_type):
                     print(f"  ✓ {target.name} defeated!")
@@ -991,55 +1112,179 @@ def create_equipment_card_pool() -> List[Card]:
     return cards
 
 
+def create_unique_card_pool() -> List[Card]:
+    """
+    Create a pool of unique cards with special mechanics.
+    These are rare pulls from specific packs.
+    """
+    cards = []
+
+    # 1. Unparalleled Swiftness (Speed Pack)
+    # -30% damage, -30% magic damage, +3 attack speed (3 attacks per turn)
+    cards.append(Card(
+        "Unparalleled Swiftness", CardType.PASSIVE, CardClass.UNIQUE,
+        "-30% Damage, -30% Magic Damage, +3 Attack Speed (3 attacks per turn)",
+        attack_bonus=-3,  # Will be calculated as percentage in combat
+        magic_attack_bonus=-3,  # Will be calculated as percentage in combat
+        attack_speed_bonus=3.0,
+        special_effect="unparalleled_swiftness"
+    ))
+
+    # 2. Reactive Armor (Defense Pack)
+    # After taking damage from a hit, the next hit deals 50% less damage, -90% Magic Damage
+    cards.append(Card(
+        "Reactive Armor", CardType.PASSIVE, CardClass.UNIQUE,
+        "After taking damage, next hit deals 50% less damage. -90% Magic Damage",
+        magic_attack_bonus=-9,  # Will be calculated as percentage in combat
+        special_effect="reactive_armor"
+    ))
+
+    # 3. Lucky 7 (Utility Pack)
+    # When luck fails to roll 7 times, guarantee the next roll
+    cards.append(Card(
+        "Lucky 7", CardType.PASSIVE, CardClass.UNIQUE,
+        "After luck fails 7 times, guarantee next luck roll (crit/dodge)",
+        special_effect="lucky_7"
+    ))
+
+    # 4. Mana Amplifier (Magic Pack)
+    # Every attack consumes 50% of mana, but deals 3x magic damage
+    cards.append(Card(
+        "Mana Amplifier", CardType.PASSIVE, CardClass.UNIQUE,
+        "Attacks consume 50% max mana but deal 3x magic damage",
+        special_effect="mana_amplifier"
+    ))
+
+    # 5. Mana Conduit (Magic Pack)
+    # Regenerate 25% of mana every turn, -100% attack
+    cards.append(Card(
+        "Mana Conduit", CardType.PASSIVE, CardClass.UNIQUE,
+        "Regenerate 25% max mana per turn, -100% Attack",
+        attack_bonus=-100,  # Will be calculated as percentage in combat
+        special_effect="mana_conduit"
+    ))
+
+    # 6. Titan's Strength (Physical Weapons Pack)
+    # Enables equipping 2 greatswords, axes and spears. All attack speed bonuses halved
+    cards.append(Card(
+        "Titan's Strength", CardType.PASSIVE, CardClass.UNIQUE,
+        "Can equip 2 Greatswords/Axes/Spears. Attack speed bonuses halved",
+        special_effect="titans_strength"
+    ))
+
+    # 7. Arcane Tome Wielder (Magic Weapons Pack)
+    # Can equip up to 4 Tomes, Cannot equip Armor, -100% Attack, +25% magic attack per tome
+    cards.append(Card(
+        "Arcane Tome Wielder", CardType.PASSIVE, CardClass.UNIQUE,
+        "Equip up to 4 Tomes. No Armor. -100% Attack, +25% Magic Attack per Tome",
+        attack_bonus=-100,  # Will be calculated as percentage in combat
+        special_effect="arcane_tome_wielder"
+    ))
+
+    return cards
+
+
 def create_card_packs() -> dict:
     """
     Create card packs for the pack-based selection system.
     Returns a dictionary where keys are pack names and values are lists of cards.
+    Each pack has common cards and unique (rare) cards.
     """
     stat_pool = create_stat_card_pool()
     equipment_pool = create_equipment_card_pool()
+    unique_pool = create_unique_card_pool()
 
     packs = {}
 
-    # Physical Weapons Pack - all physical weapons
-    packs["Physical Weapons"] = [card for card in equipment_pool
-                                 if card.card_type == CardType.WEAPON and card.attack_bonus > 0]
+    # Find unique cards by their special effects
+    unique_cards = {
+        "unparalleled_swiftness": next(c for c in unique_pool if c.special_effect == "unparalleled_swiftness"),
+        "reactive_armor": next(c for c in unique_pool if c.special_effect == "reactive_armor"),
+        "lucky_7": next(c for c in unique_pool if c.special_effect == "lucky_7"),
+        "mana_amplifier": next(c for c in unique_pool if c.special_effect == "mana_amplifier"),
+        "mana_conduit": next(c for c in unique_pool if c.special_effect == "mana_conduit"),
+        "titans_strength": next(c for c in unique_pool if c.special_effect == "titans_strength"),
+        "arcane_tome_wielder": next(c for c in unique_pool if c.special_effect == "arcane_tome_wielder"),
+    }
 
-    # Magic Weapons Pack - all magic weapons
-    packs["Magic Weapons"] = [card for card in equipment_pool
-                             if card.card_type == CardType.WEAPON and card.magic_attack_bonus > 0]
+    # Physical Weapons Pack - all physical weapons + Titan's Strength (unique)
+    packs["Physical Weapons"] = {
+        "common": [card for card in equipment_pool
+                   if card.card_type == CardType.WEAPON and card.attack_bonus > 0],
+        "unique": [unique_cards["titans_strength"]]
+    }
 
-    # Armor Pack - all armor
-    packs["Armor"] = [card for card in equipment_pool if card.card_type == CardType.ARMOR]
+    # Magic Weapons Pack - all magic weapons + Arcane Tome Wielder (unique)
+    packs["Magic Weapons"] = {
+        "common": [card for card in equipment_pool
+                   if card.card_type == CardType.WEAPON and card.magic_attack_bonus > 0],
+        "unique": [unique_cards["arcane_tome_wielder"]]
+    }
 
-    # Offense Pack - Strength, Power, Fury, Assassin (all levels)
-    packs["Offense"] = [card for card in stat_pool
-                       if any(card.name.startswith(prefix) for prefix in ["Strength", "Power", "Fury", "Assassin"])]
+    # Armor Pack - all armor (no unique)
+    packs["Armor"] = {
+        "common": [card for card in equipment_pool if card.card_type == CardType.ARMOR],
+        "unique": []
+    }
 
-    # Defense Pack - Toughness, Endurance, Guardian (all levels)
-    packs["Defense"] = [card for card in stat_pool
-                       if any(card.name.startswith(prefix) for prefix in ["Toughness", "Endurance", "Guardian"])]
+    # Offense Pack - Strength, Power, Fury, Assassin (all levels, no unique)
+    packs["Offense"] = {
+        "common": [card for card in stat_pool
+                   if any(card.name.startswith(prefix) for prefix in ["Strength", "Power", "Fury", "Assassin"])],
+        "unique": []
+    }
 
-    # Speed Pack - Swiftness, Reflex, Agility (all levels)
-    packs["Speed"] = [card for card in stat_pool
-                     if any(card.name.startswith(prefix) for prefix in ["Swiftness", "Reflex", "Agility"])]
+    # Defense Pack - Toughness, Endurance, Guardian (all levels) + Reactive Armor (unique)
+    packs["Defense"] = {
+        "common": [card for card in stat_pool
+                   if any(card.name.startswith(prefix) for prefix in ["Toughness", "Endurance", "Guardian"])],
+        "unique": [unique_cards["reactive_armor"]]
+    }
 
-    # Magic Pack - Intellect, Wisdom, Meditation, Spirit, Arcane (all levels)
-    packs["Magic"] = [card for card in stat_pool
-                     if any(card.name.startswith(prefix) for prefix in ["Intellect", "Wisdom", "Meditation", "Spirit", "Arcane"])]
+    # Speed Pack - Swiftness, Reflex, Agility (all levels) + Unparalleled Swiftness (unique)
+    packs["Speed"] = {
+        "common": [card for card in stat_pool
+                   if any(card.name.startswith(prefix) for prefix in ["Swiftness", "Reflex", "Agility"])],
+        "unique": [unique_cards["unparalleled_swiftness"]]
+    }
 
-    # Utility Pack - Vitality, Precision, Fortune, Focus, Warrior (all levels)
-    packs["Utility"] = [card for card in stat_pool
-                       if any(card.name.startswith(prefix) for prefix in ["Vitality", "Precision", "Fortune", "Focus", "Warrior"])]
+    # Magic Pack - Intellect, Wisdom, Meditation, Spirit, Arcane (all levels) + Mana Amplifier + Mana Conduit (unique)
+    packs["Magic"] = {
+        "common": [card for card in stat_pool
+                   if any(card.name.startswith(prefix) for prefix in ["Intellect", "Wisdom", "Meditation", "Spirit", "Arcane"])],
+        "unique": [unique_cards["mana_amplifier"], unique_cards["mana_conduit"]]
+    }
+
+    # Utility Pack - Vitality, Precision, Fortune, Focus, Warrior (all levels) + Lucky 7 (unique)
+    packs["Utility"] = {
+        "common": [card for card in stat_pool
+                   if any(card.name.startswith(prefix) for prefix in ["Vitality", "Precision", "Fortune", "Focus", "Warrior"])],
+        "unique": [unique_cards["lucky_7"]]
+    }
 
     return packs
 
 
-def open_pack(pack_cards: List[Card]) -> Card:
+def open_pack(pack_data: dict) -> Card:
     """
     Open a pack and get 1 random card from it.
+    Unique cards have a 5% drop rate.
+
+    Args:
+        pack_data: Dictionary with 'common' and 'unique' card lists
+
+    Returns:
+        A random card from the pack
     """
-    return random.choice(pack_cards)
+    common_cards = pack_data["common"]
+    unique_cards = pack_data["unique"]
+
+    # 5% chance to get a unique card (if any exist in this pack)
+    if unique_cards and random.random() < 0.05:
+        return random.choice(unique_cards)
+
+    # Otherwise, get a common card
+    return random.choice(common_cards)
 
 
 def select_packs_interactive() -> List[Card]:
@@ -1060,8 +1305,10 @@ def select_packs_interactive() -> List[Card]:
     # Show pack descriptions
     print("Available packs:")
     for i, pack_name in enumerate(pack_names, 1):
-        num_cards = len(packs[pack_name])
-        print(f"  {i}. {pack_name:20s} ({num_cards} possible cards)")
+        num_common = len(packs[pack_name]["common"])
+        num_unique = len(packs[pack_name]["unique"])
+        unique_str = f" + {num_unique} UNIQUE" if num_unique > 0 else ""
+        print(f"  {i}. {pack_name:20s} ({num_common} cards{unique_str})")
 
     print("\nTIP: You can pick the same pack multiple times!")
     print()
@@ -1078,7 +1325,9 @@ def select_packs_interactive() -> List[Card]:
                     pack_name = pack_names[idx]
                     card = open_pack(packs[pack_name])
                     selected_cards.append(card)
-                    print(f"✓ Opened {pack_name}! Got: {card.name}")
+                    # Show if it's a unique card
+                    unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
+                    print(f"✓ Opened {pack_name}! Got: {card.name}{unique_marker}")
                     break
                 else:
                     print(f"Invalid choice. Enter a number between 1 and {len(pack_names)}.")
