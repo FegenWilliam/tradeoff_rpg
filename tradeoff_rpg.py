@@ -24,6 +24,19 @@ class CardClass(Enum):
     EQUIPMENT = "equipment"  # Base attack/defense items
 
 
+class WeaponType(Enum):
+    """Types of weapons with different dual wielding rules."""
+    SWORD = "sword"  # Can dual wield by default
+    WAND = "wand"  # Can dual wield by default
+    GREATSWORD = "greatsword"  # Requires Titan's Strength for dual wield
+    AXE = "axe"  # Requires Titan's Strength for dual wield
+    SPEAR = "spear"  # Requires Titan's Strength for dual wield
+    STAFF = "staff"  # Cannot dual wield (unless special card)
+    TOME = "tome"  # Arcane Tome Wielder allows up to 4
+    DAGGER = "dagger"  # Cannot dual wield by default (unless special card)
+    BOW = "bow"  # Cannot dual wield (unless special card)
+
+
 class Card:
     """
     Cards are the core mechanic - they provide everything from weapons to stats.
@@ -34,11 +47,13 @@ class Card:
                  crit_chance_bonus: float = 0.0, crit_damage_bonus: float = 0.0,
                  dodge_chance_bonus: float = 0.0, attack_speed_bonus: float = 0.0,
                  luck_bonus: int = 0, special_effect: Optional[str] = None,
-                 damage: int = 0, magic_damage: int = 0, mana_cost: int = 0):
+                 damage: int = 0, magic_damage: int = 0, mana_cost: int = 0,
+                 weapon_type: Optional['WeaponType'] = None):
         self.name = name
         self.card_type = card_type
         self.card_class = card_class
         self.description = description
+        self.weapon_type = weapon_type  # Type of weapon for dual wielding rules
 
         # Stat modifiers
         self.hp_bonus = hp_bonus
@@ -165,6 +180,16 @@ class Player:
         self.deck = cards
         self.active_cards = cards.copy()
         self._apply_ascension_cards()
+
+        # Validate weapon dual wielding rules
+        validation_errors = self._validate_weapon_limits()
+        if validation_errors:
+            print("\n⚠️  DECK VALIDATION ERRORS:")
+            for error in validation_errors:
+                print(f"  - {error}")
+            print("\nPlease adjust your deck to fix these issues.")
+            raise ValueError("Deck contains invalid weapon combinations")
+
         self._apply_card_bonuses()
 
     def _apply_ascension_cards(self):
@@ -174,6 +199,56 @@ class Player:
         self.has_blood_magic = "Blood Magic" in self.ascension_slots
         self.has_blind_master = "Blind Master" in self.ascension_slots
         self.has_finishing_strike = "Finishing Strike" in self.ascension_slots
+
+    def _validate_weapon_limits(self) -> List[str]:
+        """
+        Validate weapon dual wielding rules.
+        Returns a list of error messages if validation fails.
+        """
+        errors = []
+
+        # Check for Titan's Strength unique card
+        has_titans_strength = any(c.special_effect == "titans_strength" for c in self.active_cards)
+
+        # Count weapons by type
+        weapon_counts = {}
+        for card in self.active_cards:
+            if card.card_type == CardType.WEAPON and card.weapon_type:
+                weapon_type = card.weapon_type
+                weapon_counts[weapon_type] = weapon_counts.get(weapon_type, 0) + 1
+
+        # Validate each weapon type
+        for weapon_type, count in weapon_counts.items():
+            if count <= 1:
+                continue  # Single weapon is always OK
+
+            # Check dual wielding rules
+            if weapon_type in [WeaponType.SWORD, WeaponType.WAND]:
+                # Swords and Wands can always be dual wielded
+                if count > 2:
+                    errors.append(f"Cannot equip more than 2 {weapon_type.value}s (found {count})")
+
+            elif weapon_type in [WeaponType.GREATSWORD, WeaponType.AXE, WeaponType.SPEAR]:
+                # These require Titan's Strength for dual wielding
+                if not has_titans_strength:
+                    errors.append(
+                        f"Cannot dual wield {weapon_type.value}s without 'Titan's Strength' unique card (found {count})"
+                    )
+                elif count > 2:
+                    errors.append(f"Cannot equip more than 2 {weapon_type.value}s even with Titan's Strength (found {count})")
+
+            elif weapon_type == WeaponType.TOME:
+                # Tome has special handling via Arcane Tome Wielder (allows up to 4)
+                # This is validated elsewhere, but we'll allow it here
+                pass
+
+            else:
+                # Other weapon types (Staff, Dagger, Bow) cannot be dual wielded without special cards
+                errors.append(
+                    f"Cannot dual wield {weapon_type.value}s - only 1 allowed (found {count})"
+                )
+
+        return errors
 
     def _apply_card_bonuses(self):
         """Apply all stat bonuses from equipped cards, including unique card effects."""
@@ -1065,7 +1140,7 @@ def create_starter_deck() -> List[Card]:
     """Create a basic starter deck for testing."""
     return [
         Card("Iron Sword", CardType.WEAPON, CardClass.EQUIPMENT, "A basic sword",
-             damage=15, crit_chance_bonus=5.0),
+             damage=15, crit_chance_bonus=5.0, weapon_type=WeaponType.SWORD),
         Card("Leather Armor", CardType.ARMOR, CardClass.EQUIPMENT, "Basic protection",
              defense_bonus=5, hp_bonus=30),
         Card("Vitality Charm", CardType.PASSIVE, CardClass.STAT, "Increases max HP",
@@ -1083,7 +1158,7 @@ def create_mage_deck() -> List[Card]:
     """Create a mage starter deck for testing."""
     return [
         Card("Apprentice Staff", CardType.WEAPON, CardClass.EQUIPMENT, "A basic magic staff",
-             magic_attack_bonus=20, magic_damage=15, mana_cost=15),
+             magic_attack_bonus=20, magic_damage=15, mana_cost=15, weapon_type=WeaponType.STAFF),
         Card("Mage Robes", CardType.ARMOR, CardClass.EQUIPMENT, "Light magical protection",
              defense_bonus=2, mana_bonus=100),
         Card("Crystal Focus", CardType.PASSIVE, CardClass.STAT, "Enhances magic power",
@@ -1101,7 +1176,7 @@ def create_warrior_deck() -> List[Card]:
     """Create a warrior starter deck for testing."""
     return [
         Card("Steel Greatsword", CardType.WEAPON, CardClass.EQUIPMENT, "A heavy two-handed sword",
-             damage=25, crit_damage_bonus=0.5),
+             damage=25, crit_damage_bonus=0.5, weapon_type=WeaponType.GREATSWORD),
         Card("Plate Armor", CardType.ARMOR, CardClass.EQUIPMENT, "Heavy protection",
              defense_bonus=15, hp_bonus=100),
         Card("Berserker Rage", CardType.PASSIVE, CardClass.STAT, "Raw power",
@@ -1117,7 +1192,7 @@ def create_rogue_deck() -> List[Card]:
     """Create a rogue starter deck for testing."""
     return [
         Card("Twin Daggers", CardType.WEAPON, CardClass.EQUIPMENT, "Fast dual weapons",
-             damage=12, attack_speed_bonus=0.8),
+             damage=12, attack_speed_bonus=0.8, weapon_type=WeaponType.DAGGER),
         Card("Shadow Cloak", CardType.ARMOR, CardClass.EQUIPMENT, "Light armor for mobility",
              defense_bonus=3, dodge_chance_bonus=15.0),
         Card("Assassin's Mark", CardType.PASSIVE, CardClass.STAT, "Deadly precision",
@@ -1406,30 +1481,32 @@ def create_equipment_card_pool() -> List[Card]:
 
     # Weapons - Base Attack (5 cards)
     weapons = [
-        ("Sword", 60, "A balanced weapon for physical combat"),
-        ("Greatsword", 80, "A powerful two-handed weapon, deals high damage"),
-        ("Dagger", 40, "A quick weapon for fast strikes"),
-        ("Axe", 70, "A heavy weapon with crushing power"),
-        ("Spear", 55, "A reach weapon with good attack"),
+        ("Sword", 60, "A balanced weapon for physical combat", WeaponType.SWORD),
+        ("Greatsword", 80, "A powerful two-handed weapon, deals high damage", WeaponType.GREATSWORD),
+        ("Dagger", 40, "A quick weapon for fast strikes", WeaponType.DAGGER),
+        ("Axe", 70, "A heavy weapon with crushing power", WeaponType.AXE),
+        ("Spear", 55, "A reach weapon with good attack", WeaponType.SPEAR),
     ]
-    for name, attack, desc in weapons:
+    for name, attack, desc, wtype in weapons:
         cards.append(Card(
             name, CardType.WEAPON, CardClass.EQUIPMENT,
             desc,
-            attack_bonus=attack
+            attack_bonus=attack,
+            weapon_type=wtype
         ))
 
     # Magic Weapons - Base Magic Attack (3 cards)
     magic_weapons = [
-        ("Staff", 60, "A magical staff for spellcasting"),
-        ("Wand", 45, "A quick magic weapon"),
-        ("Tome", 75, "An ancient spellbook with powerful magic"),
+        ("Staff", 60, "A magical staff for spellcasting", WeaponType.STAFF),
+        ("Wand", 45, "A quick magic weapon", WeaponType.WAND),
+        ("Tome", 75, "An ancient spellbook with powerful magic", WeaponType.TOME),
     ]
-    for name, magic, desc in magic_weapons:
+    for name, magic, desc, wtype in magic_weapons:
         cards.append(Card(
             name, CardType.WEAPON, CardClass.EQUIPMENT,
             desc,
-            magic_attack_bonus=magic
+            magic_attack_bonus=magic,
+            weapon_type=wtype
         ))
 
     # Armor - Base Defense (4 cards)
