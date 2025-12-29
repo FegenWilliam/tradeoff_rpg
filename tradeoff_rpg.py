@@ -23,6 +23,7 @@ class CardClass(Enum):
     STAT = "stat"  # Simple stat modifiers
     UNIQUE = "unique"  # Special mechanics
     EQUIPMENT = "equipment"  # Base attack/defense items
+    SPELL = "spell"  # Spell cards for magic users
 
 
 class WeaponType(Enum):
@@ -157,6 +158,16 @@ class Player:
 
         # Barrier state
         self.shield = 0  # Current shield value
+
+        # Spell system state
+        self.equipped_spell: Optional[Card] = None  # Currently equipped spell
+        self.channeling_spell: Optional[Card] = None  # Spell being channeled (Beam)
+        self.channeling_turns_remaining = 0  # Turns left for channeling
+        self.channeling_damage = 0  # Damage per turn while channeling
+        self.meteor_channeling = False  # True if channeling Meteor
+        self.meteor_channeling_turns = 0  # Turns remaining before Meteor launches (2 turns)
+        self.meteor_damage = 0  # Damage to deal when Meteor launches
+        self.dot_effects: List[dict] = []  # List of active DoT effects {name, damage, turns_remaining}
 
         # Battle statistics
         self.monsters_killed = 0
@@ -359,6 +370,12 @@ class Player:
             self.dodge_chance += 100.0
             self.crit_chance = 0.0
 
+        # Equip spell cards - only one spell can be equipped at a time
+        spell_cards = [card for card in self.active_cards if card.card_class == CardClass.SPELL]
+        if spell_cards:
+            # Equip the first spell card (priority order: as they appear in deck)
+            self.equipped_spell = spell_cards[0]
+
         self.current_hp = min(self.current_hp, self.max_hp)
         self.current_mana = min(self.current_mana, self.max_mana)
 
@@ -435,6 +452,14 @@ class Player:
     def regenerate_mana(self):
         """Regenerate mana at the start of each turn."""
         self.current_mana = min(self.current_mana + self.mana_regen, self.max_mana)
+
+    def has_magic_weapon(self) -> bool:
+        """Check if player has a magic weapon equipped (Wand, Staff, or Tome)."""
+        magic_weapon_types = [WeaponType.WAND, WeaponType.STAFF, WeaponType.TOME]
+        for card in self.active_cards:
+            if card.card_type == CardType.WEAPON and card.weapon_type in magic_weapon_types:
+                return True
+        return False
 
     def can_dodge(self, silent: bool = False) -> bool:
         """Check if player can dodge (can't dodge twice in a row). Handles Lucky 7."""
@@ -952,6 +977,240 @@ class Combat:
         return defeated, final_damage, is_crit
 
     @staticmethod
+    def _cast_spell(player: Player, spell: Card, enemies: List[Enemy], silent: bool = False) -> Tuple[int, bool]:
+        """
+        Cast a spell and handle its special mechanics.
+        Returns (total_damage_dealt, continue_to_next_attack).
+        """
+        spell_effect = spell.special_effect
+
+        # Calculate base spell damage multiplier
+        damage_multipliers = {
+            "bolt": 0.7,
+            "fireball": 1.0,
+            "rapid_bolts": 0.8,  # Per bolt
+            "beam": 2.0,  # Per turn
+            "meteor": 5.0,
+            "incinerate": 1.2,
+            "lightning_strike": 1.3,
+            "ice_shard": 1.1,
+            "arcane_missiles": 0.5,  # Per missile
+            "chain_lightning": 1.5,
+            "inferno": 2.5,
+            "frost_nova": 1.8,
+            "arcane_barrage": 3.0,
+            "flame_burst": 1.0,
+            "thunderbolt": 2.0,
+        }
+
+        multiplier = damage_multipliers.get(spell_effect, 1.0)
+        base_damage = int(player.magic_attack * multiplier)
+        total_damage = 0
+
+        # Check mana cost (most spells)
+        if spell.mana_cost > player.current_mana:
+            # Try Blood Magic if available
+            if player.has_blood_magic and player.current_hp > 1:
+                hp_cost = spell.mana_cost - player.current_mana
+                if player.current_hp - hp_cost > 1:
+                    player.current_mana = 0
+                    player.current_hp -= hp_cost
+                    if not silent:
+                        print(f"  🩸 Blood Magic! Using {hp_cost} HP as mana!")
+                else:
+                    if not silent:
+                        print(f"  ⚠️ Not enough mana/HP for {spell.name}!")
+                    return 0, True
+            else:
+                if not silent:
+                    print(f"  ⚠️ Not enough mana for {spell.name}! ({player.current_mana}/{spell.mana_cost})")
+                return 0, True
+        else:
+            player.current_mana -= spell.mana_cost
+
+        # Handle special spell mechanics
+        if spell_effect == "bolt" or spell_effect == "fireball" or spell_effect == "lightning_strike" or spell_effect == "ice_shard" or spell_effect == "thunderbolt" or spell_effect == "arcane_barrage":
+            # Single target spells
+            target = enemies[0] if enemies else None
+            if target:
+                defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, base_damage, "magic", silent=silent)
+                total_damage += damage_dealt
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)
+                    enemies.pop(0)
+
+        elif spell_effect == "rapid_bolts":
+            # Fire 3 bolts
+            if not silent:
+                print(f"  ⚡ Rapid Bolts: Firing 3 bolts!")
+            for i in range(3):
+                if not enemies:
+                    break
+                target = enemies[0]
+                defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, base_damage, "magic", silent=silent)
+                total_damage += damage_dealt
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)
+                    enemies.pop(0)
+
+        elif spell_effect == "arcane_missiles":
+            # Fire 5 missiles
+            if not silent:
+                print(f"  ✨ Arcane Missiles: Firing 5 missiles!")
+            for i in range(5):
+                if not enemies:
+                    break
+                target = enemies[0]
+                defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, base_damage, "magic", silent=silent)
+                total_damage += damage_dealt
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)
+                    enemies.pop(0)
+
+        elif spell_effect == "beam":
+            # Start channeling for 3 turns
+            player.channeling_spell = spell
+            player.channeling_turns_remaining = 3
+            player.channeling_damage = base_damage
+            if not silent:
+                print(f"  🔵 Beam: Channeling for 3 turns! (Locked in place)")
+            # Deal immediate damage on first cast
+            if enemies:
+                target = enemies[0]
+                defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, base_damage, "magic", silent=silent)
+                total_damage += damage_dealt
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)
+                    enemies.pop(0)
+
+        elif spell_effect == "meteor":
+            # Start channeling for 2 turns
+            player.meteor_channeling = True
+            player.meteor_channeling_turns = 2
+            player.meteor_damage = base_damage
+            if not silent:
+                print(f"  🌠 Meteor: Channeling... (2 turns until impact)")
+
+        elif spell_effect == "incinerate":
+            # Immediate damage + DoT for 3 turns
+            if enemies:
+                target = enemies[0]
+                defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, base_damage, "magic", silent=silent)
+                total_damage += damage_dealt
+                if not silent:
+                    print(f"  🔥 Incinerate: Burning for 3 turns!")
+                # Add DoT effect
+                player.dot_effects.append({
+                    "name": "Incinerate",
+                    "damage": base_damage,
+                    "turns_remaining": 3
+                })
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)
+                    enemies.pop(0)
+
+        elif spell_effect in ["chain_lightning", "inferno", "frost_nova", "flame_burst"]:
+            # AOE spells - hit all enemies
+            if not silent:
+                print(f"  💥 {spell.name}: Hitting all enemies!")
+            for target in enemies[:]:  # Copy list
+                defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, base_damage, "magic", silent=silent)
+                total_damage += damage_dealt
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)
+                    enemies.remove(target)
+
+        return total_damage, True
+
+    @staticmethod
+    def _process_channeling_and_dots(player: Player, enemies: List[Enemy], silent: bool = False) -> None:
+        """Process channeling spells and DoT effects at the start of player's turn."""
+        # Process Beam channeling
+        if player.channeling_spell and player.channeling_turns_remaining > 0:
+            player.channeling_turns_remaining -= 1
+            if not silent:
+                print(f"  🔵 Beam continues! ({player.channeling_turns_remaining} turns remaining)")
+            # Deal channeling damage
+            if enemies:
+                target = enemies[0]
+                defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, player.channeling_damage, "magic", silent=silent)
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)
+                    enemies.pop(0)
+
+            # End channeling if done
+            if player.channeling_turns_remaining == 0:
+                player.channeling_spell = None
+                if not silent:
+                    print(f"  🔵 Beam completed!")
+
+        # Process Meteor channeling
+        if player.meteor_channeling:
+            player.meteor_channeling_turns -= 1
+            if not silent:
+                print(f"  🌠 Meteor channeling... ({player.meteor_channeling_turns} turns until impact)")
+
+            if player.meteor_channeling_turns == 0:
+                # Meteor strikes!
+                if not silent:
+                    print(f"  💥 METEOR IMPACT! Hitting all enemies!")
+                for target in enemies[:]:  # Copy list
+                    defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, player.meteor_damage, "magic", silent=silent)
+                    if defeated:
+                        if not silent:
+                            print(f"  ✓ {target.name} defeated!")
+                        player.monsters_killed += 1
+                        player.gain_bounty(1, silent=silent)
+                        enemies.remove(target)
+
+                player.meteor_channeling = False
+                player.meteor_damage = 0
+
+        # Process DoT effects
+        for dot in player.dot_effects[:]:  # Copy list
+            dot["turns_remaining"] -= 1
+            if not silent:
+                print(f"  🔥 {dot['name']}: Burning... ({dot['turns_remaining']} turns remaining)")
+
+            # Deal DoT damage to first enemy
+            if enemies:
+                target = enemies[0]
+                defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, dot["damage"], "magic", silent=silent)
+                if defeated:
+                    if not silent:
+                        print(f"  ✓ {target.name} defeated!")
+                    player.monsters_killed += 1
+                    player.gain_bounty(1, silent=silent)
+                    enemies.pop(0)
+
+            # Remove expired DoTs
+            if dot["turns_remaining"] == 0:
+                player.dot_effects.remove(dot)
+                if not silent:
+                    print(f"  🔥 {dot['name']} expired!")
+
+    @staticmethod
     def battle(player: Player, enemies: List[Enemy], silent: bool = False) -> bool:
         """
         Execute combat between player and enemies.
@@ -985,125 +1244,156 @@ class Combat:
             for enemy in enemies:
                 enemy.regenerate_mana()
 
+            # Process channeling spells and DoTs at start of player turn
+            Combat._process_channeling_and_dots(player, enemies, silent=silent)
+
+            # Check if all enemies defeated by channeling/DoTs
+            if not enemies:
+                if not silent:
+                    print(f"\n🎉 {player.name} wins the battle!")
+                player.floors_cleared += 1
+                return True
+
             # Player turn - attack speed determines number of attacks
-            player_speed = player.get_attack_speed()
-            num_attacks = int(player_speed)
-            has_partial_attack = (player_speed % 1) > 0
+            # If channeling Beam or Meteor, skip regular attacks (locked in place)
+            if player.channeling_spell or player.meteor_channeling:
+                if not silent:
+                    spell_name = "Beam" if player.channeling_spell else "Meteor"
+                    print(f"  🔒 Locked in place by {spell_name}!")
+            else:
+                player_speed = player.get_attack_speed()
+                num_attacks = int(player_speed)
+                has_partial_attack = (player_speed % 1) > 0
 
-            # If there's a fractional part, check if we get a bonus attack
-            if has_partial_attack and random.random() < (player_speed % 1):
-                num_attacks += 1
+                # If there's a fractional part, check if we get a bonus attack
+                if has_partial_attack and random.random() < (player_speed % 1):
+                    num_attacks += 1
 
-            for attack_num in range(num_attacks):
-                if not enemies:
-                    break
+                for attack_num in range(num_attacks):
+                    if not enemies:
+                        break
 
-                target = enemies[0]
+                    target = enemies[0]
 
-                # Initialize variables
-                attack_type = "physical"  # Default
-                defeated = False
-                damage_dealt = 0
-
-                # Finishing Strike: Instant kill if enemy below 10% HP
-                if player.has_finishing_strike and target.current_hp <= target.max_hp * 0.1:
-                    if not silent:
-                        print(f"  💀 Finishing Strike! {target.name} is below 10% HP - instant kill!")
-                    target.current_hp = 0
-                    defeated = True
+                    # Initialize variables
+                    attack_type = "physical"  # Default
+                    defeated = False
                     damage_dealt = 0
-                else:
-                    # Mana Amplifier: Special attack mechanic
-                    if player.has_mana_amplifier:
-                        mana_cost = int(player.max_mana * 0.5)
-                        if player.current_mana >= mana_cost:
-                            damage = player.magic_attack * 3
-                            player.current_mana -= mana_cost
-                            attack_type = "magic"
-                            if not silent:
-                                print(f"  ⚡ Mana Amplifier: Consuming {mana_cost} mana for 3x magic damage!")
-                        else:
-                            # Blood Magic: Use HP as mana if we have it
-                            if player.has_blood_magic and player.current_hp > 1:
-                                hp_cost = mana_cost - player.current_mana
-                                if player.current_hp - hp_cost > 1:
-                                    # Use remaining mana + HP
-                                    hp_to_use = hp_cost
-                                    player.current_mana = 0
-                                    player.current_hp -= hp_to_use
-                                    damage = player.magic_attack * 3
-                                    attack_type = "magic"
-                                    if not silent:
-                                        print(f"  🩸 Blood Magic! Using {hp_to_use} HP as mana!")
-                                        print(f"  ⚡ Mana Amplifier: Consuming mana for 3x magic damage!")
-                                else:
-                                    # Not enough HP+mana for Mana Amplifier, skip attack
-                                    if not silent:
-                                        print(f"  ⚠️ Not enough mana/HP for Mana Amplifier!")
-                                    continue
-                            else:
-                                # Not enough mana for Mana Amplifier, skip attack
-                                if not silent:
-                                    print(f"  ⚠️ Not enough mana for Mana Amplifier! ({player.current_mana}/{mana_cost})")
-                                continue
+
+                    # Finishing Strike: Instant kill if enemy below 10% HP
+                    if player.has_finishing_strike and target.current_hp <= target.max_hp * 0.1:
+                        if not silent:
+                            print(f"  💀 Finishing Strike! {target.name} is below 10% HP - instant kill!")
+                        target.current_hp = 0
+                        defeated = True
+                        damage_dealt = 0
                     else:
-                        # Normal attack logic
-                        # Decide between physical and magic attack
-                        # Use magic if we have mana and magic attack is higher
-                        use_magic = (player.magic_attack > 0 and
-                                   player.current_mana >= 20 and
-                                   player.magic_attack > player.get_weapon_damage())
+                        # Check if player has a spell equipped or can use Bolt
+                        spell_to_cast = None
+                        if player.equipped_spell:
+                            spell_to_cast = player.equipped_spell
+                        elif player.has_magic_weapon() and player.magic_attack > 0:
+                            # Create temporary Bolt spell as fallback
+                            spell_to_cast = Card("Bolt", CardType.ACTIVE, CardClass.SPELL,
+                                                "Fallback spell. Cost: 5 mana, Damage: 0.7x magic attack",
+                                                mana_cost=5, special_effect="bolt")
 
-                        # Blood Magic: Use HP if out of mana
-                        if use_magic and player.current_mana < 20:
-                            if player.has_blood_magic and player.current_hp > 1:
-                                hp_cost = 20 - player.current_mana
-                                if player.current_hp - hp_cost > 1:
-                                    # Use remaining mana + HP
-                                    hp_to_use = hp_cost
-                                    player.current_mana = 0
-                                    player.current_hp -= hp_to_use
-                                    damage = player.magic_attack
-                                    attack_type = "magic"
-                                    if not silent:
-                                        print(f"  🩸 Blood Magic! Using {hp_to_use} HP as mana!")
-                                else:
-                                    # Not enough HP, fall back to physical
-                                    use_magic = False
-
-                        if use_magic and player.current_mana >= 20:
-                            damage = player.magic_attack
-                            player.current_mana -= 20
+                        # Use spell if available and conditions are met
+                        if spell_to_cast and player.magic_attack > 0:
+                            # Cast spell
+                            damage_dealt, _ = Combat._cast_spell(player, spell_to_cast, enemies, silent=silent)
                             attack_type = "magic"
+                            defeated = (len(enemies) == 0 or (enemies and enemies[0].current_hp <= 0))
+                        # Mana Amplifier: Special attack mechanic (only if no spell)
+                        elif player.has_mana_amplifier:
+                            mana_cost = int(player.max_mana * 0.5)
+                            if player.current_mana >= mana_cost:
+                                damage = player.magic_attack * 3
+                                player.current_mana -= mana_cost
+                                attack_type = "magic"
+                                if not silent:
+                                    print(f"  ⚡ Mana Amplifier: Consuming {mana_cost} mana for 3x magic damage!")
+                            else:
+                                # Blood Magic: Use HP as mana if we have it
+                                if player.has_blood_magic and player.current_hp > 1:
+                                    hp_cost = mana_cost - player.current_mana
+                                    if player.current_hp - hp_cost > 1:
+                                        # Use remaining mana + HP
+                                        hp_to_use = hp_cost
+                                        player.current_mana = 0
+                                        player.current_hp -= hp_to_use
+                                        damage = player.magic_attack * 3
+                                        attack_type = "magic"
+                                        if not silent:
+                                            print(f"  🩸 Blood Magic! Using {hp_to_use} HP as mana!")
+                                            print(f"  ⚡ Mana Amplifier: Consuming mana for 3x magic damage!")
+                                    else:
+                                        # Not enough HP+mana for Mana Amplifier, skip attack
+                                        if not silent:
+                                            print(f"  ⚠️ Not enough mana/HP for Mana Amplifier!")
+                                        continue
+                                else:
+                                    # Not enough mana for Mana Amplifier, skip attack
+                                    if not silent:
+                                        print(f"  ⚠️ Not enough mana for Mana Amplifier! ({player.current_mana}/{mana_cost})")
+                                    continue
+
+                            # Check for Impale from previous crit
+                            impale_damage = 0
+                            if player.has_impaler and target.impaled:
+                                impale_damage = int(damage * 0.7)
+                                target.impaled = False  # Consume impale
+                                if not silent:
+                                    print(f"  🗡️ Impale triggers! Additional hit for {impale_damage} damage (70% of main hit)")
+
+                            defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, damage, attack_type, silent=silent)
+
+                            # Apply impale damage if the enemy survived the main hit
+                            if impale_damage > 0 and not defeated:
+                                actual_impale_damage = max(1, impale_damage - target.defense)
+                                target.current_hp -= actual_impale_damage
+                                player.total_damage_dealt += actual_impale_damage
+                                if not silent:
+                                    print(f"  🗡️ Impale deals {actual_impale_damage} damage!")
+                                if target.current_hp <= 0:
+                                    defeated = True
+
+                            # Impaler: Apply impale on crit (for next hit)
+                            if player.has_impaler and is_crit and not defeated:
+                                target.impaled = True
+                                if not silent:
+                                    print(f"  🗡️ Impale applied! Next hit will deal +70% damage")
                         else:
+                            # Normal attack logic (no spell, no mana amplifier)
+                            # Use physical attack
                             damage = player.get_weapon_damage()
                             attack_type = "physical"
 
-                    # Check for Impale from previous crit
-                    impale_damage = 0
-                    if player.has_impaler and target.impaled:
-                        impale_damage = int(damage * 0.7)
-                        target.impaled = False  # Consume impale
-                        if not silent:
-                            print(f"  🗡️ Impale triggers! Additional hit for {impale_damage} damage (70% of main hit)")
+                            # Check for Impale from previous crit
+                            impale_damage = 0
+                            if player.has_impaler and target.impaled:
+                                impale_damage = int(damage * 0.7)
+                                target.impaled = False  # Consume impale
+                                if not silent:
+                                    print(f"  🗡️ Impale triggers! Additional hit for {impale_damage} damage (70% of main hit)")
 
-                    defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, damage, attack_type, silent=silent)
+                            defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, damage, attack_type, silent=silent)
 
-                    # Apply impale damage if the enemy survived the main hit
-                    if impale_damage > 0 and not defeated:
-                        actual_impale_damage = max(1, impale_damage - target.defense)
-                        target.current_hp -= actual_impale_damage
-                        player.total_damage_dealt += actual_impale_damage
-                        if not silent:
-                            print(f"  🗡️ Impale deals {actual_impale_damage} damage!")
-                        if target.current_hp <= 0:
-                            defeated = True
+                            # Apply impale damage if the enemy survived the main hit
+                            if impale_damage > 0 and not defeated:
+                                actual_impale_damage = max(1, impale_damage - target.defense)
+                                target.current_hp -= actual_impale_damage
+                                player.total_damage_dealt += actual_impale_damage
+                                if not silent:
+                                    print(f"  🗡️ Impale deals {actual_impale_damage} damage!")
+                                if target.current_hp <= 0:
+                                    defeated = True
 
-                    # Impaler: Apply impale on crit (for next hit)
-                    if player.has_impaler and is_crit and not defeated:
-                        target.impaled = True
-                        if not silent:
-                            print(f"  🗡️ Impale applied! Next hit will deal +70% damage")
+                            # Impaler: Apply impale on crit (for next hit)
+                            if player.has_impaler and is_crit and not defeated:
+                                target.impaled = True
+                                if not silent:
+                                    print(f"  🗡️ Impale applied! Next hit will deal +70% damage")
 
                 # Berserker's Rage: Gain rage on successful physical hit
                 if player.has_berserkers_rage and attack_type == "physical" and damage_dealt > 0:
@@ -1576,6 +1866,165 @@ def create_equipment_card_pool() -> List[Card]:
     return cards
 
 
+def create_spell_card_pool() -> List[Card]:
+    """
+    Create a pool of spell cards with various mechanics.
+    Spells can only be cast when wielding a magic weapon (Wand, Staff, or Tome).
+    """
+    cards = []
+
+    # 1. Bolt - Fallback spell (always available with magic weapon)
+    cards.append(Card(
+        "Bolt", CardType.ACTIVE, CardClass.SPELL,
+        "Fallback spell. Cost: 5 mana, Damage: 0.7x magic attack",
+        mana_cost=5,
+        magic_damage=0,  # Will be calculated as 0.7x magic_attack
+        special_effect="bolt"
+    ))
+
+    # 2. Fireball - Basic spell
+    cards.append(Card(
+        "Fireball", CardType.ACTIVE, CardClass.SPELL,
+        "Basic fire spell. Cost: 10 mana, Damage: 1x magic attack",
+        mana_cost=10,
+        magic_damage=0,  # Will be calculated as 1x magic_attack
+        attack_speed_bonus=1.0,
+        special_effect="fireball"
+    ))
+
+    # 3. Rapid Bolts - Multi-hit spell
+    cards.append(Card(
+        "Rapid Bolts", CardType.ACTIVE, CardClass.SPELL,
+        "Fires 3 rapid bolts. Cost: 20 mana total (8 per bolt), Damage: 0.8x per bolt, 1.5x attack speed",
+        mana_cost=20,
+        magic_damage=0,  # Will be calculated as 0.8x magic_attack per bolt
+        attack_speed_bonus=1.5,
+        special_effect="rapid_bolts"
+    ))
+
+    # 4. Beam - Continuous cast spell
+    cards.append(Card(
+        "Beam", CardType.ACTIVE, CardClass.SPELL,
+        "Continuous beam for 3 turns. Cost: 30 mana (upfront), Damage: 2x magic attack per turn, locks you in place",
+        mana_cost=30,
+        magic_damage=0,  # Will be calculated as 2x magic_attack per turn
+        attack_speed_bonus=1.0,
+        special_effect="beam"
+    ))
+
+    # 5. Meteor - Channeled AOE spell
+    cards.append(Card(
+        "Meteor", CardType.ACTIVE, CardClass.SPELL,
+        "Summons a meteor after 2 turns of channeling. Cost: 50 mana, Damage: 5x magic attack (AOE), 0.5x attack speed",
+        mana_cost=50,
+        magic_damage=0,  # Will be calculated as 5x magic_attack
+        attack_speed_bonus=0.5,
+        special_effect="meteor"
+    ))
+
+    # 6. Incinerate - Damage over time spell
+    cards.append(Card(
+        "Incinerate", CardType.ACTIVE, CardClass.SPELL,
+        "Burns enemy over time. Cost: 20 mana, Damage: 1.2x magic attack on cast + at start of next 3 turns",
+        mana_cost=20,
+        magic_damage=0,  # Will be calculated as 1.2x magic_attack
+        attack_speed_bonus=1.0,
+        special_effect="incinerate"
+    ))
+
+    # 7. Lightning Strike - Quick burst spell
+    cards.append(Card(
+        "Lightning Strike", CardType.ACTIVE, CardClass.SPELL,
+        "Fast lightning strike. Cost: 15 mana, Damage: 1.3x magic attack, 1.4x attack speed",
+        mana_cost=15,
+        magic_damage=0,  # Will be calculated as 1.3x magic_attack
+        attack_speed_bonus=1.4,
+        special_effect="lightning_strike"
+    ))
+
+    # 8. Ice Shard - Medium damage spell
+    cards.append(Card(
+        "Ice Shard", CardType.ACTIVE, CardClass.SPELL,
+        "Sharp ice projectile. Cost: 12 mana, Damage: 1.1x magic attack, 1.1x attack speed",
+        mana_cost=12,
+        magic_damage=0,  # Will be calculated as 1.1x magic_attack
+        attack_speed_bonus=1.1,
+        special_effect="ice_shard"
+    ))
+
+    # 9. Arcane Missiles - Multi-projectile spell
+    cards.append(Card(
+        "Arcane Missiles", CardType.ACTIVE, CardClass.SPELL,
+        "Fires 5 weak missiles. Cost: 25 mana, Damage: 0.5x magic attack per missile, 1.2x attack speed",
+        mana_cost=25,
+        magic_damage=0,  # Will be calculated as 0.5x magic_attack per missile
+        attack_speed_bonus=1.2,
+        special_effect="arcane_missiles"
+    ))
+
+    # 10. Chain Lightning - AOE chain spell
+    cards.append(Card(
+        "Chain Lightning", CardType.ACTIVE, CardClass.SPELL,
+        "Lightning that chains to all enemies. Cost: 35 mana, Damage: 1.5x magic attack (AOE), 0.9x attack speed",
+        mana_cost=35,
+        magic_damage=0,  # Will be calculated as 1.5x magic_attack per enemy
+        attack_speed_bonus=0.9,
+        special_effect="chain_lightning"
+    ))
+
+    # 11. Inferno - Large AOE fire spell
+    cards.append(Card(
+        "Inferno", CardType.ACTIVE, CardClass.SPELL,
+        "Massive fire explosion. Cost: 45 mana, Damage: 2.5x magic attack (AOE), 0.7x attack speed",
+        mana_cost=45,
+        magic_damage=0,  # Will be calculated as 2.5x magic_attack per enemy
+        attack_speed_bonus=0.7,
+        special_effect="inferno"
+    ))
+
+    # 12. Frost Nova - AOE freeze spell
+    cards.append(Card(
+        "Frost Nova", CardType.ACTIVE, CardClass.SPELL,
+        "Freezing blast hitting all enemies. Cost: 30 mana, Damage: 1.8x magic attack (AOE), 0.8x attack speed",
+        mana_cost=30,
+        magic_damage=0,  # Will be calculated as 1.8x magic_attack per enemy
+        attack_speed_bonus=0.8,
+        special_effect="frost_nova"
+    ))
+
+    # 13. Arcane Barrage - Heavy single target
+    cards.append(Card(
+        "Arcane Barrage", CardType.ACTIVE, CardClass.SPELL,
+        "Concentrated arcane power. Cost: 40 mana, Damage: 3x magic attack, 0.8x attack speed",
+        mana_cost=40,
+        magic_damage=0,  # Will be calculated as 3x magic_attack
+        attack_speed_bonus=0.8,
+        special_effect="arcane_barrage"
+    ))
+
+    # 14. Flame Burst - Quick AOE
+    cards.append(Card(
+        "Flame Burst", CardType.ACTIVE, CardClass.SPELL,
+        "Quick fire burst. Cost: 18 mana, Damage: 1x magic attack (AOE), 1.1x attack speed",
+        mana_cost=18,
+        magic_damage=0,  # Will be calculated as 1x magic_attack per enemy
+        attack_speed_bonus=1.1,
+        special_effect="flame_burst"
+    ))
+
+    # 15. Thunderbolt - Strong single target
+    cards.append(Card(
+        "Thunderbolt", CardType.ACTIVE, CardClass.SPELL,
+        "Powerful lightning bolt. Cost: 28 mana, Damage: 2x magic attack, 0.9x attack speed",
+        mana_cost=28,
+        magic_damage=0,  # Will be calculated as 2x magic_attack
+        attack_speed_bonus=0.9,
+        special_effect="thunderbolt"
+    ))
+
+    return cards
+
+
 def create_unique_card_pool() -> List[Card]:
     """
     Create a pool of unique cards with special mechanics.
@@ -1674,6 +2123,7 @@ def create_card_packs() -> dict:
     stat_pool = create_stat_card_pool()
     equipment_pool = create_equipment_card_pool()
     unique_pool = create_unique_card_pool()
+    spell_pool = create_spell_card_pool()
 
     packs = {}
 
@@ -1743,6 +2193,23 @@ def create_card_packs() -> dict:
         "common": [card for card in stat_pool
                    if any(card.name.startswith(prefix) for prefix in ["Vitality", "Precision", "Fortune", "Focus", "Warrior"])],
         "unique": [unique_cards["lucky_7"]]
+    }
+
+    # Spells Pack - all spell cards (no unique spells yet)
+    # Separate basic spells from advanced spells
+    basic_spells = [card for card in spell_pool if card.special_effect in ["bolt", "fireball", "ice_shard", "lightning_strike"]]
+    advanced_spells = [card for card in spell_pool if card.special_effect not in ["bolt", "fireball", "ice_shard", "lightning_strike"]]
+
+    # Basic Spells Pack - for early game
+    packs["Basic Spells"] = {
+        "common": basic_spells,
+        "unique": []
+    }
+
+    # Advanced Spells Pack - all spells including advanced ones
+    packs["Advanced Spells"] = {
+        "common": spell_pool,
+        "unique": []
     }
 
     return packs
