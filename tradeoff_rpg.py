@@ -5,8 +5,7 @@ A competitive game where up to 4 players climb a 1000-floor tower using card-bas
 
 import random
 from enum import Enum
-from typing import List, Optional
-from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 
 class CardType(Enum):
@@ -25,34 +24,40 @@ class CardClass(Enum):
     EQUIPMENT = "equipment"  # Base attack/defense items
 
 
-@dataclass
 class Card:
     """
     Cards are the core mechanic - they provide everything from weapons to stats.
     """
-    name: str
-    card_type: CardType
-    card_class: CardClass
-    description: str
+    def __init__(self, name: str, card_type: CardType, card_class: CardClass, description: str,
+                 hp_bonus: int = 0, attack_bonus: int = 0, defense_bonus: int = 0,
+                 magic_attack_bonus: int = 0, mana_bonus: int = 0, mana_regen_bonus: int = 0,
+                 crit_chance_bonus: float = 0.0, crit_damage_bonus: float = 0.0,
+                 dodge_chance_bonus: float = 0.0, attack_speed_bonus: float = 0.0,
+                 luck_bonus: int = 0, special_effect: Optional[str] = None,
+                 damage: int = 0, magic_damage: int = 0, mana_cost: int = 0):
+        self.name = name
+        self.card_type = card_type
+        self.card_class = card_class
+        self.description = description
 
-    # Stat modifiers
-    hp_bonus: int = 0
-    attack_bonus: int = 0
-    defense_bonus: int = 0
-    magic_attack_bonus: int = 0
-    mana_bonus: int = 0
-    mana_regen_bonus: int = 0
-    crit_chance_bonus: float = 0.0  # Percentage
-    crit_damage_bonus: float = 0.0  # Multiplier addition
-    dodge_chance_bonus: float = 0.0  # Percentage
-    attack_speed_bonus: float = 0.0  # Additional attacks
-    luck_bonus: int = 0
+        # Stat modifiers
+        self.hp_bonus = hp_bonus
+        self.attack_bonus = attack_bonus
+        self.defense_bonus = defense_bonus
+        self.magic_attack_bonus = magic_attack_bonus
+        self.mana_bonus = mana_bonus
+        self.mana_regen_bonus = mana_regen_bonus
+        self.crit_chance_bonus = crit_chance_bonus  # Percentage
+        self.crit_damage_bonus = crit_damage_bonus  # Multiplier addition
+        self.dodge_chance_bonus = dodge_chance_bonus  # Percentage
+        self.attack_speed_bonus = attack_speed_bonus  # Additional attacks
+        self.luck_bonus = luck_bonus
 
-    # Special effects (to be expanded)
-    special_effect: Optional[str] = None
-    damage: int = 0  # For weapon cards
-    magic_damage: int = 0  # For spell cards
-    mana_cost: int = 0  # For spell cards
+        # Special effects (to be expanded)
+        self.special_effect = special_effect
+        self.damage = damage  # For weapon cards
+        self.magic_damage = magic_damage  # For spell cards
+        self.mana_cost = mana_cost  # For spell cards
 
     def __str__(self):
         return f"{self.name} ({self.card_type.value}): {self.description}"
@@ -184,7 +189,7 @@ class Player:
         self.dodged_last_attack = success
         return success
 
-    def calculate_damage(self, base_damage: int) -> tuple[int, bool]:
+    def calculate_damage(self, base_damage: int) -> Tuple[int, bool]:
         """
         Calculate damage with crit chance.
         Returns (damage, is_crit).
@@ -449,7 +454,7 @@ class Enemy:
         self.dodged_last_attack = success
         return success
 
-    def calculate_damage(self, base_damage: int) -> tuple[int, bool]:
+    def calculate_damage(self, base_damage: int) -> Tuple[int, bool]:
         """
         Calculate damage with crit chance.
         Returns (damage, is_crit).
