@@ -38,6 +38,12 @@ class WeaponType(Enum):
     BOW = "bow"  # Cannot dual wield (unless special card)
 
 
+class AccessoryType(Enum):
+    """Types of accessories with equip limits."""
+    RING = "ring"  # Can equip up to 2
+    AMULET = "amulet"  # Can equip only 1
+
+
 class Card:
     """
     Cards are the core mechanic - they provide everything from weapons to stats.
@@ -49,12 +55,14 @@ class Card:
                  dodge_chance_bonus: float = 0.0, attack_speed_bonus: float = 0.0,
                  luck_bonus: int = 0, special_effect: Optional[str] = None,
                  damage: int = 0, magic_damage: int = 0, mana_cost: int = 0,
-                 weapon_type: Optional['WeaponType'] = None):
+                 weapon_type: Optional['WeaponType'] = None,
+                 accessory_type: Optional['AccessoryType'] = None):
         self.name = name
         self.card_type = card_type
         self.card_class = card_class
         self.description = description
         self.weapon_type = weapon_type  # Type of weapon for dual wielding rules
+        self.accessory_type = accessory_type  # Type of accessory for equip limits
 
         # Stat modifiers
         self.hp_bonus = hp_bonus
@@ -182,14 +190,14 @@ class Player:
         self.active_cards = cards.copy()
         self._apply_ascension_cards()
 
-        # Validate weapon dual wielding rules
-        validation_errors = self._validate_weapon_limits()
+        # Validate equipment limits
+        validation_errors = self._validate_equipment_limits()
         if validation_errors:
             print("\n⚠️  DECK VALIDATION ERRORS:")
             for error in validation_errors:
                 print(f"  - {error}")
             print("\nPlease adjust your deck to fix these issues.")
-            raise ValueError("Deck contains invalid weapon combinations")
+            raise ValueError("Deck contains invalid equipment combinations")
 
         self._apply_card_bonuses()
 
@@ -201,9 +209,9 @@ class Player:
         self.has_blind_master = "Blind Master" in self.ascension_slots
         self.has_finishing_strike = "Finishing Strike" in self.ascension_slots
 
-    def _validate_weapon_limits(self) -> List[str]:
+    def _validate_equipment_limits(self) -> List[str]:
         """
-        Validate weapon dual wielding rules.
+        Validate equipment limits: weapons, accessories, and armor.
         Returns a list of error messages if validation fails.
         """
         errors = []
@@ -248,6 +256,27 @@ class Player:
                 errors.append(
                     f"Cannot dual wield {weapon_type.value}s - only 1 allowed (found {count})"
                 )
+
+        # Count accessories by type
+        accessory_counts = {}
+        for card in self.active_cards:
+            if card.card_type == CardType.ACCESSORY and card.accessory_type:
+                accessory_type = card.accessory_type
+                accessory_counts[accessory_type] = accessory_counts.get(accessory_type, 0) + 1
+
+        # Validate accessory limits
+        for accessory_type, count in accessory_counts.items():
+            if accessory_type == AccessoryType.RING:
+                if count > 2:
+                    errors.append(f"Cannot equip more than 2 {accessory_type.value}s (found {count})")
+            elif accessory_type == AccessoryType.AMULET:
+                if count > 1:
+                    errors.append(f"Cannot equip more than 1 {accessory_type.value} (found {count})")
+
+        # Count armor pieces
+        armor_count = sum(1 for card in self.active_cards if card.card_type == CardType.ARMOR)
+        if armor_count > 1:
+            errors.append(f"Cannot equip more than 1 armor piece (found {armor_count})")
 
         return errors
 
@@ -1483,39 +1512,45 @@ def create_equipment_card_pool() -> List[Card]:
         "Ring of Power", CardType.ACCESSORY, CardClass.EQUIPMENT,
         "A ring imbued with raw strength",
         attack_bonus=35,
-        magic_attack_bonus=35
+        magic_attack_bonus=35,
+        accessory_type=AccessoryType.RING
     ))
     cards.append(Card(
         "Ring of Precision", CardType.ACCESSORY, CardClass.EQUIPMENT,
         "Enhances accuracy and critical strikes",
         crit_chance_bonus=8.0,
-        crit_damage_bonus=0.25
+        crit_damage_bonus=0.25,
+        accessory_type=AccessoryType.RING
     ))
     cards.append(Card(
         "Ring of Swiftness", CardType.ACCESSORY, CardClass.EQUIPMENT,
         "Increases attack speed and dodge chance",
         attack_speed_bonus=0.3,
-        dodge_chance_bonus=5.0
+        dodge_chance_bonus=5.0,
+        accessory_type=AccessoryType.RING
     ))
 
     # Accessories - Amulets (3 cards)
     cards.append(Card(
         "Amulet of Vitality", CardType.ACCESSORY, CardClass.EQUIPMENT,
         "Grants increased health and vitality",
-        hp_bonus=100
+        hp_bonus=100,
+        accessory_type=AccessoryType.AMULET
     ))
     cards.append(Card(
         "Amulet of the Arcane", CardType.ACCESSORY, CardClass.EQUIPMENT,
         "Enhances magical power and reserves",
         mana_bonus=120,
-        mana_regen_bonus=8
+        mana_regen_bonus=8,
+        accessory_type=AccessoryType.AMULET
     ))
     cards.append(Card(
         "Amulet of Warding", CardType.ACCESSORY, CardClass.EQUIPMENT,
         "Provides magical protection and resilience",
         defense_bonus=18,
         dodge_chance_bonus=6.0,
-        hp_bonus=40
+        hp_bonus=40,
+        accessory_type=AccessoryType.AMULET
     ))
 
     return cards
