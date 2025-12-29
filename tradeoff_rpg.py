@@ -18,6 +18,13 @@ class CardType(Enum):
     CONSUMABLE = "consumable"
 
 
+class CardClass(Enum):
+    """Card classifications for the deck building system."""
+    STAT = "stat"  # Simple stat modifiers
+    UNIQUE = "unique"  # Special mechanics
+    EQUIPMENT = "equipment"  # Base attack/defense items
+
+
 @dataclass
 class Card:
     """
@@ -25,6 +32,7 @@ class Card:
     """
     name: str
     card_type: CardType
+    card_class: CardClass
     description: str
 
     # Stat modifiers
@@ -627,17 +635,17 @@ class Combat:
 def create_starter_deck() -> List[Card]:
     """Create a basic starter deck for testing."""
     return [
-        Card("Iron Sword", CardType.WEAPON, "A basic sword",
+        Card("Iron Sword", CardType.WEAPON, CardClass.EQUIPMENT, "A basic sword",
              damage=15, crit_chance_bonus=5.0),
-        Card("Leather Armor", CardType.ARMOR, "Basic protection",
+        Card("Leather Armor", CardType.ARMOR, CardClass.EQUIPMENT, "Basic protection",
              defense_bonus=5, hp_bonus=30),
-        Card("Vitality Charm", CardType.PASSIVE, "Increases max HP",
+        Card("Vitality Charm", CardType.PASSIVE, CardClass.STAT, "Increases max HP",
              hp_bonus=50),
-        Card("Power Ring", CardType.PASSIVE, "Increases attack and crit",
+        Card("Power Ring", CardType.PASSIVE, CardClass.STAT, "Increases attack and crit",
              attack_bonus=5, crit_damage_bonus=0.2),
-        Card("Lucky Coin", CardType.PASSIVE, "Increases luck",
+        Card("Lucky Coin", CardType.PASSIVE, CardClass.STAT, "Increases luck",
              luck_bonus=10, dodge_chance_bonus=5.0),
-        Card("Swift Boots", CardType.PASSIVE, "Increases attack speed",
+        Card("Swift Boots", CardType.PASSIVE, CardClass.STAT, "Increases attack speed",
              attack_speed_bonus=0.5),
     ]
 
@@ -645,17 +653,17 @@ def create_starter_deck() -> List[Card]:
 def create_mage_deck() -> List[Card]:
     """Create a mage starter deck for testing."""
     return [
-        Card("Apprentice Staff", CardType.WEAPON, "A basic magic staff",
+        Card("Apprentice Staff", CardType.WEAPON, CardClass.EQUIPMENT, "A basic magic staff",
              magic_attack_bonus=20, magic_damage=15, mana_cost=15),
-        Card("Mage Robes", CardType.ARMOR, "Light magical protection",
+        Card("Mage Robes", CardType.ARMOR, CardClass.EQUIPMENT, "Light magical protection",
              defense_bonus=2, mana_bonus=100),
-        Card("Crystal Focus", CardType.PASSIVE, "Enhances magic power",
+        Card("Crystal Focus", CardType.PASSIVE, CardClass.STAT, "Enhances magic power",
              magic_attack_bonus=15, mana_regen_bonus=10),
-        Card("Arcane Intellect", CardType.PASSIVE, "Increases mana pool",
+        Card("Arcane Intellect", CardType.PASSIVE, CardClass.STAT, "Increases mana pool",
              mana_bonus=50, mana_regen_bonus=5),
-        Card("Critical Focus", CardType.PASSIVE, "Increases spell crit",
+        Card("Critical Focus", CardType.PASSIVE, CardClass.STAT, "Increases spell crit",
              crit_chance_bonus=10.0, crit_damage_bonus=0.3),
-        Card("Blink", CardType.PASSIVE, "Increases dodge",
+        Card("Blink", CardType.PASSIVE, CardClass.STAT, "Increases dodge",
              dodge_chance_bonus=10.0),
     ]
 
@@ -663,15 +671,15 @@ def create_mage_deck() -> List[Card]:
 def create_warrior_deck() -> List[Card]:
     """Create a warrior starter deck for testing."""
     return [
-        Card("Steel Greatsword", CardType.WEAPON, "A heavy two-handed sword",
+        Card("Steel Greatsword", CardType.WEAPON, CardClass.EQUIPMENT, "A heavy two-handed sword",
              damage=25, crit_damage_bonus=0.5),
-        Card("Plate Armor", CardType.ARMOR, "Heavy protection",
+        Card("Plate Armor", CardType.ARMOR, CardClass.EQUIPMENT, "Heavy protection",
              defense_bonus=15, hp_bonus=100),
-        Card("Berserker Rage", CardType.PASSIVE, "Raw power",
+        Card("Berserker Rage", CardType.PASSIVE, CardClass.STAT, "Raw power",
              attack_bonus=15, crit_chance_bonus=10.0),
-        Card("Iron Will", CardType.PASSIVE, "Increases survivability",
+        Card("Iron Will", CardType.PASSIVE, CardClass.STAT, "Increases survivability",
              hp_bonus=80, defense_bonus=5),
-        Card("Battle Fury", CardType.PASSIVE, "Attack faster",
+        Card("Battle Fury", CardType.PASSIVE, CardClass.STAT, "Attack faster",
              attack_speed_bonus=0.3, attack_bonus=5),
     ]
 
@@ -679,17 +687,395 @@ def create_warrior_deck() -> List[Card]:
 def create_rogue_deck() -> List[Card]:
     """Create a rogue starter deck for testing."""
     return [
-        Card("Twin Daggers", CardType.WEAPON, "Fast dual weapons",
+        Card("Twin Daggers", CardType.WEAPON, CardClass.EQUIPMENT, "Fast dual weapons",
              damage=12, attack_speed_bonus=0.8),
-        Card("Shadow Cloak", CardType.ARMOR, "Light armor for mobility",
+        Card("Shadow Cloak", CardType.ARMOR, CardClass.EQUIPMENT, "Light armor for mobility",
              defense_bonus=3, dodge_chance_bonus=15.0),
-        Card("Assassin's Mark", CardType.PASSIVE, "Deadly precision",
+        Card("Assassin's Mark", CardType.PASSIVE, CardClass.STAT, "Deadly precision",
              crit_chance_bonus=20.0, crit_damage_bonus=0.8),
-        Card("Shadow Step", CardType.PASSIVE, "Evasive maneuvers",
+        Card("Shadow Step", CardType.PASSIVE, CardClass.STAT, "Evasive maneuvers",
              dodge_chance_bonus=10.0, attack_speed_bonus=0.2),
-        Card("Lucky Strike", CardType.PASSIVE, "Fortune favors the bold",
+        Card("Lucky Strike", CardType.PASSIVE, CardClass.STAT, "Fortune favors the bold",
              luck_bonus=20, crit_chance_bonus=5.0),
     ]
+
+
+def create_stat_card_pool() -> List[Card]:
+    """
+    Create a pool of 300 stat cards.
+    Mix of pure upside (small bonuses) and tradeoff cards (bigger bonuses with downsides).
+    """
+    cards = []
+
+    # Pure upside cards (150 cards - small bonuses)
+    # HP bonuses (20 cards)
+    for i in range(20):
+        hp_values = [10, 15, 20, 25, 30]
+        cards.append(Card(
+            f"Vitality {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{hp_values[i % 5]} HP",
+            hp_bonus=hp_values[i % 5]
+        ))
+
+    # Attack bonuses (20 cards)
+    for i in range(20):
+        atk_values = [2, 3, 4, 5, 6]
+        cards.append(Card(
+            f"Strength {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{atk_values[i % 5]} Attack",
+            attack_bonus=atk_values[i % 5]
+        ))
+
+    # Defense bonuses (20 cards)
+    for i in range(20):
+        def_values = [2, 3, 4, 5, 6]
+        cards.append(Card(
+            f"Toughness {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{def_values[i % 5]} Defense",
+            defense_bonus=def_values[i % 5]
+        ))
+
+    # Magic Attack bonuses (15 cards)
+    for i in range(15):
+        mag_values = [3, 5, 7, 9, 11]
+        cards.append(Card(
+            f"Intellect {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{mag_values[i % 5]} Magic Attack",
+            magic_attack_bonus=mag_values[i % 5]
+        ))
+
+    # Crit Chance bonuses (15 cards)
+    for i in range(15):
+        crit_values = [1.0, 2.0, 3.0, 4.0, 5.0]
+        cards.append(Card(
+            f"Precision {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{crit_values[i % 5]}% Crit Chance",
+            crit_chance_bonus=crit_values[i % 5]
+        ))
+
+    # Dodge Chance bonuses (15 cards)
+    for i in range(15):
+        dodge_values = [2.0, 3.0, 4.0, 5.0, 6.0]
+        cards.append(Card(
+            f"Agility {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{dodge_values[i % 5]}% Dodge Chance",
+            dodge_chance_bonus=dodge_values[i % 5]
+        ))
+
+    # Mana bonuses (15 cards)
+    for i in range(15):
+        mana_values = [10, 20, 30, 40, 50]
+        cards.append(Card(
+            f"Wisdom {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{mana_values[i % 5]} Mana",
+            mana_bonus=mana_values[i % 5]
+        ))
+
+    # Mana Regen bonuses (10 cards)
+    for i in range(10):
+        regen_values = [2, 3, 4, 5]
+        cards.append(Card(
+            f"Meditation {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{regen_values[i % 4]} Mana Regen",
+            mana_regen_bonus=regen_values[i % 4]
+        ))
+
+    # Luck bonuses (10 cards)
+    for i in range(10):
+        luck_values = [2, 4, 6, 8]
+        cards.append(Card(
+            f"Fortune {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{luck_values[i % 4]} Luck",
+            luck_bonus=luck_values[i % 4]
+        ))
+
+    # Attack Speed bonuses (10 cards)
+    for i in range(10):
+        speed_values = [0.1, 0.15, 0.2, 0.25]
+        cards.append(Card(
+            f"Swiftness {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{speed_values[i % 4]} Attack Speed",
+            attack_speed_bonus=speed_values[i % 4]
+        ))
+
+    # Tradeoff cards (150 cards - bigger bonuses with downsides)
+
+    # Fatal Strikes style - High crit with attack speed penalty (20 cards)
+    for i in range(20):
+        crit_chance = [3.0, 4.0, 5.0, 6.0, 7.0][i % 5]
+        crit_damage = [0.15, 0.2, 0.25, 0.3, 0.35][i % 5]
+        speed_penalty = [-0.03, -0.04, -0.05, -0.06, -0.07][i % 5]
+        cards.append(Card(
+            f"Fatal Strikes {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{crit_chance}% Crit Chance, +{int(crit_damage*100)}% Crit Damage, {speed_penalty} Attack Speed",
+            crit_chance_bonus=crit_chance,
+            crit_damage_bonus=crit_damage,
+            attack_speed_bonus=speed_penalty
+        ))
+
+    # Nimble style - High dodge with slight speed (20 cards)
+    for i in range(20):
+        dodge = [8.0, 10.0, 12.0, 14.0, 16.0][i % 5]
+        speed = [0.03, 0.04, 0.05, 0.06, 0.07][i % 5]
+        cards.append(Card(
+            f"Nimble {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{dodge}% Dodge Chance, +{speed} Attack Speed",
+            dodge_chance_bonus=dodge,
+            attack_speed_bonus=speed
+        ))
+
+    # Glass Cannon - High attack, low HP (20 cards)
+    for i in range(20):
+        attack = [10, 12, 14, 16, 18][i % 5]
+        hp_penalty = [-15, -20, -25, -30, -35][i % 5]
+        cards.append(Card(
+            f"Glass Cannon {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{attack} Attack, {hp_penalty} HP",
+            attack_bonus=attack,
+            hp_bonus=hp_penalty
+        ))
+
+    # Berserker - High attack, low defense (20 cards)
+    for i in range(20):
+        attack = [8, 10, 12, 14, 16][i % 5]
+        def_penalty = [-2, -3, -4, -5, -6][i % 5]
+        cards.append(Card(
+            f"Berserker {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{attack} Attack, {def_penalty} Defense",
+            attack_bonus=attack,
+            defense_bonus=def_penalty
+        ))
+
+    # Tank - High HP and Defense, lower attack speed (15 cards)
+    for i in range(15):
+        hp = [40, 50, 60, 70, 80][i % 5]
+        defense = [5, 6, 7, 8, 9][i % 5]
+        speed_penalty = [-0.1, -0.12, -0.15, -0.18, -0.2][i % 5]
+        cards.append(Card(
+            f"Tank {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{hp} HP, +{defense} Defense, {speed_penalty} Attack Speed",
+            hp_bonus=hp,
+            defense_bonus=defense,
+            attack_speed_bonus=speed_penalty
+        ))
+
+    # Arcane Power - High magic attack, low mana regen (15 cards)
+    for i in range(15):
+        magic = [15, 20, 25, 30, 35][i % 5]
+        regen_penalty = [-2, -3, -4, -5, -6][i % 5]
+        cards.append(Card(
+            f"Arcane Power {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{magic} Magic Attack, {regen_penalty} Mana Regen",
+            magic_attack_bonus=magic,
+            mana_regen_bonus=regen_penalty
+        ))
+
+    # Evasive - High dodge, lower HP (15 cards)
+    for i in range(15):
+        dodge = [10.0, 12.0, 14.0, 16.0, 18.0][i % 5]
+        hp_penalty = [-10, -15, -20, -25, -30][i % 5]
+        cards.append(Card(
+            f"Evasive {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{dodge}% Dodge Chance, {hp_penalty} HP",
+            dodge_chance_bonus=dodge,
+            hp_bonus=hp_penalty
+        ))
+
+    # Critical Focus - High crit, lower luck (15 cards)
+    for i in range(15):
+        crit_chance = [8.0, 10.0, 12.0, 14.0, 16.0][i % 5]
+        crit_damage = [0.2, 0.25, 0.3, 0.35, 0.4][i % 5]
+        luck_penalty = [-3, -4, -5, -6, -7][i % 5]
+        cards.append(Card(
+            f"Critical Focus {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{crit_chance}% Crit Chance, +{int(crit_damage*100)}% Crit Damage, {luck_penalty} Luck",
+            crit_chance_bonus=crit_chance,
+            crit_damage_bonus=crit_damage,
+            luck_bonus=luck_penalty
+        ))
+
+    # Speed Demon - High attack speed, lower attack (10 cards)
+    for i in range(10):
+        speed = [0.3, 0.35, 0.4, 0.45, 0.5][i % 5]
+        attack_penalty = [-4, -5, -6, -7, -8][i % 5]
+        cards.append(Card(
+            f"Speed Demon {i+1}", CardType.PASSIVE, CardClass.STAT,
+            f"+{speed} Attack Speed, {attack_penalty} Attack",
+            attack_speed_bonus=speed,
+            attack_bonus=attack_penalty
+        ))
+
+    return cards
+
+
+def create_equipment_card_pool() -> List[Card]:
+    """
+    Create a pool of 15 equipment cards.
+    These provide base attack or defense stats.
+    """
+    cards = []
+
+    # Weapons - Base Attack (5 cards)
+    weapons = [
+        ("Sword", 60, "A balanced weapon for physical combat"),
+        ("Greatsword", 80, "A powerful two-handed weapon, deals high damage"),
+        ("Dagger", 40, "A quick weapon for fast strikes"),
+        ("Axe", 70, "A heavy weapon with crushing power"),
+        ("Spear", 55, "A reach weapon with good attack"),
+    ]
+    for name, attack, desc in weapons:
+        cards.append(Card(
+            name, CardType.WEAPON, CardClass.EQUIPMENT,
+            desc,
+            attack_bonus=attack
+        ))
+
+    # Magic Weapons - Base Magic Attack (3 cards)
+    magic_weapons = [
+        ("Staff", 60, "A magical staff for spellcasting"),
+        ("Wand", 45, "A quick magic weapon"),
+        ("Tome", 75, "An ancient spellbook with powerful magic"),
+    ]
+    for name, magic, desc in magic_weapons:
+        cards.append(Card(
+            name, CardType.WEAPON, CardClass.EQUIPMENT,
+            desc,
+            magic_attack_bonus=magic
+        ))
+
+    # Armor - Base Defense (4 cards)
+    armors = [
+        ("Plate Armor", 40, "Heavy armor providing excellent protection"),
+        ("Leather Armor", 25, "Light armor for mobility"),
+        ("Chain Mail", 32, "Medium armor with good protection"),
+        ("Robes", 15, "Magical robes with some protection"),
+    ]
+    for name, defense, desc in armors:
+        cards.append(Card(
+            name, CardType.ARMOR, CardClass.EQUIPMENT,
+            desc,
+            defense_bonus=defense
+        ))
+
+    # Hybrid Equipment (3 cards)
+    hybrids = [
+        ("Shield", 0, "A sturdy shield", 25, 50),  # defense, hp
+        ("Battle Armor", 0, "Armor designed for combat", 28, 30),  # defense, hp
+        ("Mystic Robe", 0, "Enchanted robes", 12, 0),  # defense, mana
+    ]
+    for name, _, desc, defense, bonus in hybrids:
+        if name == "Mystic Robe":
+            cards.append(Card(
+                name, CardType.ARMOR, CardClass.EQUIPMENT,
+                desc,
+                defense_bonus=defense,
+                mana_bonus=100
+            ))
+        else:
+            cards.append(Card(
+                name, CardType.ARMOR, CardClass.EQUIPMENT,
+                desc,
+                defense_bonus=defense,
+                hp_bonus=bonus
+            ))
+
+    return cards
+
+
+def draw_cards_for_player() -> List[Card]:
+    """
+    Draw 30 cards from the pool with guarantees:
+    - At least 5 equipment cards
+    - At least 15 stat cards
+    - Remaining 10 can be any type
+    """
+    stat_pool = create_stat_card_pool()
+    equipment_pool = create_equipment_card_pool()
+
+    # Guarantee minimums
+    selected_equipment = random.sample(equipment_pool, min(5, len(equipment_pool)))
+    selected_stats = random.sample(stat_pool, min(15, len(stat_pool)))
+
+    # Draw remaining cards (10 more)
+    remaining_pool = stat_pool + equipment_pool
+    # Remove already selected cards
+    for card in selected_equipment + selected_stats:
+        if card in remaining_pool:
+            remaining_pool.remove(card)
+
+    selected_remaining = random.sample(remaining_pool, min(10, len(remaining_pool)))
+
+    all_selected = selected_equipment + selected_stats + selected_remaining
+    random.shuffle(all_selected)
+
+    return all_selected
+
+
+def select_cards_interactive(available_cards: List[Card]) -> List[Card]:
+    """
+    Allow player to select 10 cards from the 30 available.
+    """
+    selected = []
+    available = available_cards.copy()
+
+    print("\n" + "="*60)
+    print("CARD SELECTION")
+    print("="*60)
+    print("You have 30 cards to choose from. Select 10 cards for your deck.")
+    print()
+
+    while len(selected) < 10:
+        print(f"\nSelected: {len(selected)}/10")
+        print("\nAvailable cards:")
+        for i, card in enumerate(available, 1):
+            # Build stat display
+            stats = []
+            if card.hp_bonus != 0:
+                stats.append(f"HP: {card.hp_bonus:+d}")
+            if card.attack_bonus != 0:
+                stats.append(f"ATK: {card.attack_bonus:+d}")
+            if card.defense_bonus != 0:
+                stats.append(f"DEF: {card.defense_bonus:+d}")
+            if card.magic_attack_bonus != 0:
+                stats.append(f"MAG: {card.magic_attack_bonus:+d}")
+            if card.mana_bonus != 0:
+                stats.append(f"MANA: {card.mana_bonus:+d}")
+            if card.mana_regen_bonus != 0:
+                stats.append(f"MREGEN: {card.mana_regen_bonus:+d}")
+            if card.crit_chance_bonus != 0:
+                stats.append(f"CRIT: {card.crit_chance_bonus:+.1f}%")
+            if card.crit_damage_bonus != 0:
+                stats.append(f"CDMG: {card.crit_damage_bonus:+.1%}")
+            if card.dodge_chance_bonus != 0:
+                stats.append(f"DODGE: {card.dodge_chance_bonus:+.1f}%")
+            if card.attack_speed_bonus != 0:
+                stats.append(f"SPD: {card.attack_speed_bonus:+.2f}")
+            if card.luck_bonus != 0:
+                stats.append(f"LUCK: {card.luck_bonus:+d}")
+
+            stat_str = ", ".join(stats)
+            print(f"  {i:2d}. {card.name:30s} [{card.card_class.value:9s}] {stat_str}")
+
+        try:
+            choice = input(f"\nSelect card (1-{len(available)}): ").strip()
+            idx = int(choice) - 1
+
+            if 0 <= idx < len(available):
+                chosen_card = available.pop(idx)
+                selected.append(chosen_card)
+                print(f"✓ Added {chosen_card.name}")
+            else:
+                print("Invalid choice. Try again.")
+        except (ValueError, IndexError):
+            print("Invalid input. Try again.")
+
+    print("\n" + "="*60)
+    print("FINAL DECK")
+    print("="*60)
+    for card in selected:
+        print(f"  - {card.name}")
+
+    return selected
 
 
 def main():
@@ -709,29 +1095,40 @@ def main():
         name = input(f"Enter name for Player {i+1}: ")
         player = Player(name)
 
-        # Choose deck type
-        print(f"\nChoose a deck for {name}:")
-        print("  1. Balanced (balanced stats)")
-        print("  2. Mage (high magic attack, mana regen)")
-        print("  3. Warrior (high HP and defense)")
-        print("  4. Rogue (high crit, dodge, attack speed)")
+        # Choose deck building mode
+        print(f"\nChoose deck mode for {name}:")
+        print("  1. Custom Build (draw 30 cards, choose 10)")
+        print("  2. Preset Deck (balanced, mage, warrior, or rogue)")
 
-        deck_choice = input("Enter choice (1-4): ").strip()
-        if deck_choice == "2":
-            deck = create_mage_deck()
-        elif deck_choice == "3":
-            deck = create_warrior_deck()
-        elif deck_choice == "4":
-            deck = create_rogue_deck()
+        mode_choice = input("Enter choice (1-2): ").strip()
+
+        if mode_choice == "1":
+            # New card selection system
+            available_cards = draw_cards_for_player()
+            deck = select_cards_interactive(available_cards)
         else:
-            deck = create_starter_deck()
+            # Preset decks
+            print(f"\nChoose a preset deck for {name}:")
+            print("  1. Balanced (balanced stats)")
+            print("  2. Mage (high magic attack, mana regen)")
+            print("  3. Warrior (high HP and defense)")
+            print("  4. Rogue (high crit, dodge, attack speed)")
+
+            deck_choice = input("Enter choice (1-4): ").strip()
+            if deck_choice == "2":
+                deck = create_mage_deck()
+            elif deck_choice == "3":
+                deck = create_warrior_deck()
+            elif deck_choice == "4":
+                deck = create_rogue_deck()
+            else:
+                deck = create_starter_deck()
+
+            print(f"\n{player.name}'s deck:")
+            for card in deck:
+                print(f"  - {card}")
 
         player.equip_deck(deck)
-
-        print(f"\n{player.name}'s deck:")
-        for card in deck:
-            print(f"  - {card}")
-
         players.append(player)
 
     print("\n" + "="*60)
