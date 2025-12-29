@@ -12,6 +12,7 @@ class CardType(Enum):
     """Types of cards available in the game."""
     WEAPON = "weapon"
     ARMOR = "armor"
+    ACCESSORY = "accessory"
     SPELL = "spell"
     PASSIVE = "passive"
     CONSUMABLE = "consumable"
@@ -1406,7 +1407,7 @@ def create_stat_card_pool() -> List[Card]:
 
 def create_equipment_card_pool() -> List[Card]:
     """
-    Create a pool of 15 equipment cards.
+    Create a pool of 21 equipment cards.
     These provide base attack or defense stats.
     """
     cards = []
@@ -1476,6 +1477,46 @@ def create_equipment_card_pool() -> List[Card]:
                 defense_bonus=defense,
                 hp_bonus=bonus
             ))
+
+    # Accessories - Rings (3 cards)
+    cards.append(Card(
+        "Ring of Power", CardType.ACCESSORY, CardClass.EQUIPMENT,
+        "A ring imbued with raw strength",
+        attack_bonus=35,
+        magic_attack_bonus=35
+    ))
+    cards.append(Card(
+        "Ring of Precision", CardType.ACCESSORY, CardClass.EQUIPMENT,
+        "Enhances accuracy and critical strikes",
+        crit_chance_bonus=8.0,
+        crit_damage_bonus=0.25
+    ))
+    cards.append(Card(
+        "Ring of Swiftness", CardType.ACCESSORY, CardClass.EQUIPMENT,
+        "Increases attack speed and dodge chance",
+        attack_speed_bonus=0.3,
+        dodge_chance_bonus=5.0
+    ))
+
+    # Accessories - Amulets (3 cards)
+    cards.append(Card(
+        "Amulet of Vitality", CardType.ACCESSORY, CardClass.EQUIPMENT,
+        "Grants increased health and vitality",
+        hp_bonus=100
+    ))
+    cards.append(Card(
+        "Amulet of the Arcane", CardType.ACCESSORY, CardClass.EQUIPMENT,
+        "Enhances magical power and reserves",
+        mana_bonus=120,
+        mana_regen_bonus=8
+    ))
+    cards.append(Card(
+        "Amulet of Warding", CardType.ACCESSORY, CardClass.EQUIPMENT,
+        "Provides magical protection and resilience",
+        defense_bonus=18,
+        dodge_chance_bonus=6.0,
+        hp_bonus=40
+    ))
 
     return cards
 
