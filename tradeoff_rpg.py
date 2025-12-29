@@ -991,130 +991,107 @@ def create_equipment_card_pool() -> List[Card]:
     return cards
 
 
-def draw_cards_for_player() -> List[Card]:
+def create_card_packs() -> dict:
     """
-    Draw 30 cards from the pool with guarantees:
-    - At least 5 equipment cards
-    - At least 15 stat cards
-    - Remaining 10 can be any type
+    Create card packs for the pack-based selection system.
+    Returns a dictionary where keys are pack names and values are lists of cards.
     """
     stat_pool = create_stat_card_pool()
     equipment_pool = create_equipment_card_pool()
 
-    # Guarantee minimums
-    selected_equipment = random.sample(equipment_pool, min(5, len(equipment_pool)))
-    selected_stats = random.sample(stat_pool, min(15, len(stat_pool)))
+    packs = {}
 
-    # Draw remaining cards (10 more)
-    remaining_pool = stat_pool + equipment_pool
-    # Remove already selected cards
-    for card in selected_equipment + selected_stats:
-        if card in remaining_pool:
-            remaining_pool.remove(card)
+    # Physical Weapons Pack - all physical weapons
+    packs["Physical Weapons"] = [card for card in equipment_pool
+                                 if card.card_type == CardType.WEAPON and card.attack_bonus > 0]
 
-    selected_remaining = random.sample(remaining_pool, min(10, len(remaining_pool)))
+    # Magic Weapons Pack - all magic weapons
+    packs["Magic Weapons"] = [card for card in equipment_pool
+                             if card.card_type == CardType.WEAPON and card.magic_attack_bonus > 0]
 
-    all_selected = selected_equipment + selected_stats + selected_remaining
-    random.shuffle(all_selected)
+    # Armor Pack - all armor
+    packs["Armor"] = [card for card in equipment_pool if card.card_type == CardType.ARMOR]
 
-    return all_selected
+    # Offense Pack - Strength, Power, Fury, Assassin (all levels)
+    packs["Offense"] = [card for card in stat_pool
+                       if any(card.name.startswith(prefix) for prefix in ["Strength", "Power", "Fury", "Assassin"])]
+
+    # Defense Pack - Toughness, Endurance, Guardian (all levels)
+    packs["Defense"] = [card for card in stat_pool
+                       if any(card.name.startswith(prefix) for prefix in ["Toughness", "Endurance", "Guardian"])]
+
+    # Speed Pack - Swiftness, Reflex, Agility (all levels)
+    packs["Speed"] = [card for card in stat_pool
+                     if any(card.name.startswith(prefix) for prefix in ["Swiftness", "Reflex", "Agility"])]
+
+    # Magic Pack - Intellect, Wisdom, Meditation, Spirit, Arcane (all levels)
+    packs["Magic"] = [card for card in stat_pool
+                     if any(card.name.startswith(prefix) for prefix in ["Intellect", "Wisdom", "Meditation", "Spirit", "Arcane"])]
+
+    # Utility Pack - Vitality, Precision, Fortune, Focus, Warrior (all levels)
+    packs["Utility"] = [card for card in stat_pool
+                       if any(card.name.startswith(prefix) for prefix in ["Vitality", "Precision", "Fortune", "Focus", "Warrior"])]
+
+    return packs
 
 
-def select_cards_interactive(available_cards: List[Card]) -> List[Card]:
+def open_pack(pack_cards: List[Card]) -> Card:
     """
-    Allow player to select 10 cards from the 30 available.
-    Supports multi-select: enter multiple numbers separated by spaces or commas.
+    Open a pack and get 1 random card from it.
     """
-    selected = []
-    available = available_cards.copy()
+    return random.choice(pack_cards)
+
+
+def select_packs_interactive() -> List[Card]:
+    """
+    Allow player to select and open 10 packs.
+    Each pack gives 1 random card.
+    """
+    packs = create_card_packs()
+    pack_names = list(packs.keys())
+    selected_cards = []
 
     print("\n" + "="*60)
-    print("CARD SELECTION")
+    print("PACK SELECTION")
     print("="*60)
-    print("You have 30 cards to choose from. Select 10 cards for your deck.")
-    print("TIP: Enter multiple numbers at once! (e.g., '1 5 7 12' or '1,5,7,12')")
+    print("Select 10 packs to open. Each pack gives you 1 random card!")
     print()
 
-    while len(selected) < 10:
-        print(f"\nSelected: {len(selected)}/10")
-        print("\nAvailable cards:")
-        for i, card in enumerate(available, 1):
-            # Build stat display
-            stats = []
-            if card.hp_bonus != 0:
-                stats.append(f"HP:{card.hp_bonus:+d}")
-            if card.attack_bonus != 0:
-                stats.append(f"ATK:{card.attack_bonus:+d}")
-            if card.defense_bonus != 0:
-                stats.append(f"DEF:{card.defense_bonus:+d}")
-            if card.magic_attack_bonus != 0:
-                stats.append(f"MAG:{card.magic_attack_bonus:+d}")
-            if card.mana_bonus != 0:
-                stats.append(f"MANA:{card.mana_bonus:+d}")
-            if card.mana_regen_bonus != 0:
-                stats.append(f"MREG:{card.mana_regen_bonus:+d}")
-            if card.crit_chance_bonus != 0:
-                stats.append(f"CRIT:{card.crit_chance_bonus:+.1f}%")
-            if card.crit_damage_bonus != 0:
-                stats.append(f"CDMG:{card.crit_damage_bonus:+.0%}")
-            if card.dodge_chance_bonus != 0:
-                stats.append(f"DODGE:{card.dodge_chance_bonus:+.1f}%")
-            if card.attack_speed_bonus != 0:
-                stats.append(f"SPD:{card.attack_speed_bonus:+.2f}")
-            if card.luck_bonus != 0:
-                stats.append(f"LUCK:{card.luck_bonus:+d}")
+    # Show pack descriptions
+    print("Available packs:")
+    for i, pack_name in enumerate(pack_names, 1):
+        num_cards = len(packs[pack_name])
+        print(f"  {i}. {pack_name:20s} ({num_cards} possible cards)")
 
-            stat_str = " ".join(stats)
-            print(f"  {i:2d}. {card.name:25s} [{card.card_class.value[0].upper()}] {stat_str}")
+    print("\nTIP: You can pick the same pack multiple times!")
+    print()
 
-        remaining = 10 - len(selected)
-        try:
-            choice = input(f"\nSelect {remaining} card(s) (1-{len(available)}): ").strip()
+    for pick_num in range(1, 11):
+        print(f"\n--- Pick {pick_num}/10 ---")
 
-            # Parse input - support both spaces and commas
-            choice = choice.replace(',', ' ')
-            numbers = choice.split()
+        while True:
+            try:
+                choice = input(f"Select pack (1-{len(pack_names)}): ").strip()
+                idx = int(choice) - 1
 
-            # Convert to indices and validate
-            indices = []
-            for num in numbers:
-                idx = int(num) - 1
-                if 0 <= idx < len(available):
-                    indices.append(idx)
-                else:
-                    print(f"Invalid number: {num} (out of range)")
-                    indices = []
+                if 0 <= idx < len(pack_names):
+                    pack_name = pack_names[idx]
+                    card = open_pack(packs[pack_name])
+                    selected_cards.append(card)
+                    print(f"✓ Opened {pack_name}! Got: {card.name}")
                     break
-
-            # Check for duplicates in selection
-            if len(indices) != len(set(indices)):
-                print("Error: You entered duplicate numbers. Try again.")
-                continue
-
-            # Check if we're selecting too many
-            if len(indices) > remaining:
-                print(f"Error: You can only select {remaining} more card(s). Try again.")
-                continue
-
-            if indices:
-                # Sort indices in reverse to remove from end first (avoid index shifting)
-                for idx in sorted(indices, reverse=True):
-                    chosen_card = available.pop(idx)
-                    selected.append(chosen_card)
-                    print(f"✓ Added {chosen_card.name}")
-            else:
-                print("Invalid input. Try again.")
-
-        except (ValueError, IndexError):
-            print("Invalid input. Enter numbers separated by spaces or commas.")
+                else:
+                    print(f"Invalid choice. Enter a number between 1 and {len(pack_names)}.")
+            except ValueError:
+                print("Invalid input. Enter a number.")
 
     print("\n" + "="*60)
-    print("FINAL DECK")
+    print("FINAL DECK (10 cards)")
     print("="*60)
-    for card in selected:
+    for card in selected_cards:
         print(f"  - {card.name}")
 
-    return selected
+    return selected_cards
 
 
 def main():
@@ -1134,9 +1111,8 @@ def main():
         name = input(f"Enter name for Player {i+1}: ")
         player = Player(name)
 
-        # Draw cards and build custom deck
-        available_cards = draw_cards_for_player()
-        deck = select_cards_interactive(available_cards)
+        # Select and open packs to build deck
+        deck = select_packs_interactive()
 
         player.equip_deck(deck)
         players.append(player)
