@@ -136,7 +136,6 @@ class Player:
         # Leveling system
         self.level = 1
         self.current_xp = 0
-        self.packs_earned_from_leveling = 0
 
     def equip_deck(self, cards: List[Card]):
         """Equip cards before entering the tower."""
@@ -355,10 +354,17 @@ class Player:
         # floor 3: 100 * 1.1^2 = 121
         return int(100 * (1.1 ** (floor - 1)))
 
-    def gain_xp(self, floor: int, silent: bool = False) -> List[Card]:
+    def get_max_packs(self) -> int:
+        """Calculate max packs player can open based on level."""
+        if self.level < 20:
+            return 9 + self.level  # Level 1 = 10, Level 2 = 11, etc.
+        else:
+            return 30  # Level 20 = 30 (gets +2 instead of +1)
+
+    def gain_xp(self, floor: int, silent: bool = False) -> bool:
         """
         Gain XP from completing a floor and level up if applicable.
-        Returns list of cards from packs earned by leveling up.
+        Returns True if player leveled up.
         """
         xp_gained = self.get_xp_from_floor(floor)
         self.current_xp += xp_gained
@@ -367,36 +373,26 @@ class Player:
             print(f"  📈 {self.name} gained {xp_gained} XP! ({self.current_xp}/{self.get_xp_for_next_level()})")
 
         # Check for level ups (can level up multiple times if enough XP)
-        new_cards = []
+        leveled_up = False
         while self.level < 20 and self.current_xp >= self.get_xp_for_next_level():
             self.current_xp -= self.get_xp_for_next_level()
+            old_level = self.level
             self.level += 1
+            leveled_up = True
 
-            # Determine pack rewards
+            # Calculate pack increase
             if self.level == 20:
-                packs_to_open = 2
+                pack_increase = 2  # Level 20 gives +2
             else:
-                packs_to_open = 1
+                pack_increase = 1  # Other levels give +1
+
+            new_max_packs = self.get_max_packs()
 
             if not silent:
                 print(f"  🎉 LEVEL UP! {self.name} reached level {self.level}!")
-                print(f"  🎁 Opening {packs_to_open} bonus pack(s)...")
+                print(f"  📦 Max packs increased by +{pack_increase}! (Next run: {new_max_packs} packs)")
 
-            # Open packs and add cards to deck
-            packs = create_card_packs()
-            pack_names = list(packs.keys())
-            for _ in range(packs_to_open):
-                # Random pack selection
-                pack_name = random.choice(pack_names)
-                card = open_pack(packs[pack_name])
-                new_cards.append(card)
-                self.packs_earned_from_leveling += 1
-
-                unique_marker = " ✨" if card.card_class == CardClass.UNIQUE else ""
-                if not silent:
-                    print(f"    - Opened {pack_name}: {card.name}{unique_marker}")
-
-        return new_cards
+        return leveled_up
 
     def __str__(self):
         status = "ESCAPED" if not self.is_alive else "CLIMBING"
@@ -1430,7 +1426,7 @@ def print_battle_report(players: List[Player]):
         print(f"  Final Floor:        {player.current_floor}")
         print(f"  Status:             {'Escaped at floor ' + str(player.escaped_floor) if player.escaped_floor else 'Reached the top!'}")
         print(f"  Final Level:        {player.level} ({player.current_xp}/{player.get_xp_for_next_level()} XP)")
-        print(f"  Packs from Leveling: {player.packs_earned_from_leveling}")
+        print(f"  Next Run Packs:     {player.get_max_packs()}")
         print(f"  Floors Cleared:     {player.floors_cleared}")
         print(f"  Monsters Killed:    {player.monsters_killed}")
         print(f"  Total Damage Dealt: {player.total_damage_dealt}")
@@ -1453,11 +1449,18 @@ def print_battle_report(players: List[Player]):
     print("\n" + "="*80)
 
 
-def select_packs_interactive() -> List[Card]:
+def select_packs_interactive(level: int = 1) -> List[Card]:
     """
-    Allow player to select and open 10 packs.
+    Allow player to select and open packs based on their level.
     Each pack gives 1 random card.
+    Level 1: 10 packs, Level 2: 11 packs, ..., Level 20: 30 packs
     """
+    # Calculate number of packs based on level
+    if level < 20:
+        num_packs = 9 + level
+    else:
+        num_packs = 30
+
     packs = create_card_packs()
     pack_names = list(packs.keys())
     selected_cards = []
@@ -1465,7 +1468,7 @@ def select_packs_interactive() -> List[Card]:
     print("\n" + "="*60)
     print("PACK SELECTION")
     print("="*60)
-    print("Select 10 packs to open. Each pack gives you 1 random card!")
+    print(f"Level {level}: Select {num_packs} packs to open. Each pack gives you 1 random card!")
     print()
 
     # Show pack descriptions
@@ -1479,8 +1482,8 @@ def select_packs_interactive() -> List[Card]:
     print("\nTIP: You can pick the same pack multiple times!")
     print()
 
-    for pick_num in range(1, 11):
-        print(f"\n--- Pick {pick_num}/10 ---")
+    for pick_num in range(1, num_packs + 1):
+        print(f"\n--- Pick {pick_num}/{num_packs} ---")
 
         while True:
             try:
@@ -1501,7 +1504,7 @@ def select_packs_interactive() -> List[Card]:
                 print("Invalid input. Enter a number.")
 
     print("\n" + "="*60)
-    print("FINAL DECK (10 cards)")
+    print(f"FINAL DECK ({num_packs} cards)")
     print("="*60)
     for card in selected_cards:
         print(f"  - {card.name}")
@@ -1526,8 +1529,8 @@ def main():
         name = input(f"Enter name for Player {i+1}: ")
         player = Player(name)
 
-        # Select and open packs to build deck
-        deck = select_packs_interactive()
+        # Select and open packs to build deck (based on player level)
+        deck = select_packs_interactive(player.level)
 
         player.equip_deck(deck)
         players.append(player)
@@ -1565,14 +1568,11 @@ def main():
             if won:
                 # Player beat the floor
                 # Gain XP and potentially level up
-                new_cards = player.gain_xp(floor, silent=True)
+                leveled_up = player.gain_xp(floor, silent=True)
 
-                # Add new cards to player's deck if they leveled up
-                if new_cards:
-                    player.active_cards.extend(new_cards)
-                    player.deck.extend(new_cards)
-                    player._apply_card_bonuses()
-                    print(f"  ⚡ {player.name} leveled up to {player.level}! Gained {len(new_cards)} new card(s)!")
+                # Show level up notification
+                if leveled_up:
+                    print(f"  ⚡ {player.name} leveled up to {player.level}! (Next run: {player.get_max_packs()} packs)")
 
                 player.reset_for_floor()  # Heal for next floor
             else:
