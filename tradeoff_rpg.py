@@ -1007,10 +1007,11 @@ class Combat:
 
                 # Ancestral Rage: Gain rage on successful physical hit
                 if player.has_ancestral_rage and attack_type == "physical" and damage_dealt > 0:
-                    player.ancestral_rage_stacks += 1
-                    speed_bonus = (player.ancestral_rage_stacks // 5) * 0.1
-                    if not silent:
-                        print(f"  ⚡ Ancestral Rage +1! (Stacks: {player.ancestral_rage_stacks}, +{player.ancestral_rage_stacks * 5} Attack, +{speed_bonus:.1f} Speed)")
+                    if player.ancestral_rage_stacks < 50:
+                        player.ancestral_rage_stacks += 1
+                        speed_bonus = (player.ancestral_rage_stacks // 5) * 0.1
+                        if not silent:
+                            print(f"  ⚡ Ancestral Rage +1! (Stacks: {player.ancestral_rage_stacks}/50, +{player.ancestral_rage_stacks * 5} Attack, +{speed_bonus:.1f} Speed)")
 
                 if defeated:
                     if not silent:
@@ -1829,7 +1830,7 @@ def get_ascension_cards() -> dict:
     Returns a dictionary mapping card names to descriptions.
     """
     return {
-        "Ancestral Rage": "Gain 1 Rage Stack per physical hit. Rage gives +5 Attack per stack. Rage also gives bonus to speed at +0.1 per 5 stacks.",
+        "Ancestral Rage": "Gain 1 Rage Stack per physical hit (max 50). Rage gives +5 Attack per stack. Rage also gives bonus to speed at +0.1 per 5 stacks.",
         "Impaler": "Critical Hits Impale Enemies. Impaled enemies take an additional 70% damage on the next hit (effectively 170% damage total).",
         "Blood Magic": "Use HP as mana when out of mana. Won't kill you - minimum HP is 1, and you must have HP > 1 to use this ability.",
         "Blind Master": "+100% Dodge Chance, cannot deal critical hits.",
