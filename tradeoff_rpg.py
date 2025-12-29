@@ -1570,8 +1570,13 @@ def create_bounty_shop_inventory() -> List[Tuple[Card, int]]:
     """
     Create the bounty shop inventory with cards and their prices.
     Returns a list of (Card, price) tuples.
-    Minimum 3 weapon cards at 10 bounty each.
-    Other cards priced 20-40 bounty based on impact.
+    Pricing:
+    - Weapons: 10 bounty (all 8 weapons available)
+    - Armor: 20 bounty (3 armors)
+    - Low-tier stat cards: 20 bounty (5 random)
+    - Mid-tier stat cards: 30 bounty (3 random)
+    - High-tier stat cards: 40 bounty (2 random)
+    - Unique card: 200 bounty (1 only per shop)
     """
     inventory = []
     stat_pool = create_stat_card_pool()
@@ -1603,9 +1608,9 @@ def create_bounty_shop_inventory() -> List[Tuple[Card, int]]:
     for card in random.sample(high_stat_cards, min(2, len(high_stat_cards))):
         inventory.append((card, 40))
 
-    # Unique cards: 40 bounty (only 1-2 random unique cards)
-    for unique_card in random.sample(unique_pool, min(2, len(unique_pool))):
-        inventory.append((unique_card, 40))
+    # Unique cards: 200 bounty (only 1 per shop)
+    unique_card = random.choice(unique_pool)
+    inventory.append((unique_card, 200))
 
     return inventory
 
