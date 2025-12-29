@@ -133,6 +133,11 @@ class Player:
         self.crits_landed = 0
         self.dodges_made = 0
 
+        # Leveling system
+        self.level = 1
+        self.current_xp = 0
+        self.packs_earned_from_leveling = 0
+
     def equip_deck(self, cards: List[Card]):
         """Equip cards before entering the tower."""
         self.deck = cards
@@ -336,6 +341,62 @@ class Player:
         self.current_mana = self.max_mana
         self.dodged_last_attack = False
         self.reactive_armor_active = False  # Reset Reactive Armor between floors
+
+    def get_xp_for_next_level(self) -> int:
+        """Calculate XP required to reach the next level."""
+        # Formula: level*level*1000 + (level//10*10000)
+        return self.level * self.level * 1000 + (self.level // 10 * 10000)
+
+    def get_xp_from_floor(self, floor: int) -> int:
+        """Calculate XP gained from completing a floor."""
+        # Floor 1 = 100 XP, each floor after +10%
+        # floor 1: 100
+        # floor 2: 100 * 1.1 = 110
+        # floor 3: 100 * 1.1^2 = 121
+        return int(100 * (1.1 ** (floor - 1)))
+
+    def gain_xp(self, floor: int, silent: bool = False) -> List[Card]:
+        """
+        Gain XP from completing a floor and level up if applicable.
+        Returns list of cards from packs earned by leveling up.
+        """
+        xp_gained = self.get_xp_from_floor(floor)
+        self.current_xp += xp_gained
+
+        if not silent:
+            print(f"  📈 {self.name} gained {xp_gained} XP! ({self.current_xp}/{self.get_xp_for_next_level()})")
+
+        # Check for level ups (can level up multiple times if enough XP)
+        new_cards = []
+        while self.level < 20 and self.current_xp >= self.get_xp_for_next_level():
+            self.current_xp -= self.get_xp_for_next_level()
+            self.level += 1
+
+            # Determine pack rewards
+            if self.level == 20:
+                packs_to_open = 2
+            else:
+                packs_to_open = 1
+
+            if not silent:
+                print(f"  🎉 LEVEL UP! {self.name} reached level {self.level}!")
+                print(f"  🎁 Opening {packs_to_open} bonus pack(s)...")
+
+            # Open packs and add cards to deck
+            packs = create_card_packs()
+            pack_names = list(packs.keys())
+            for _ in range(packs_to_open):
+                # Random pack selection
+                pack_name = random.choice(pack_names)
+                card = open_pack(packs[pack_name])
+                new_cards.append(card)
+                self.packs_earned_from_leveling += 1
+
+                unique_marker = " ✨" if card.card_class == CardClass.UNIQUE else ""
+                if not silent:
+                    print(f"    - Opened {pack_name}: {card.name}{unique_marker}")
+
+        return new_cards
 
     def __str__(self):
         status = "ESCAPED" if not self.is_alive else "CLIMBING"
@@ -1350,12 +1411,12 @@ def print_battle_report(players: List[Player]):
     # Print summary table
     print("FINAL STANDINGS:")
     print("-" * 80)
-    print(f"{'Rank':<6} {'Player':<20} {'Floor':<8} {'Status':<15} {'Monsters':<10} {'Dmg Dealt':<12}")
+    print(f"{'Rank':<6} {'Player':<20} {'Floor':<8} {'Level':<8} {'Status':<15} {'Monsters':<10}")
     print("-" * 80)
 
     for i, player in enumerate(sorted_players, 1):
         status = f"Escaped" if player.escaped_floor else "Victorious"
-        print(f"{i:<6} {player.name:<20} {player.current_floor:<8} {status:<15} {player.monsters_killed:<10} {player.total_damage_dealt:<12}")
+        print(f"{i:<6} {player.name:<20} {player.current_floor:<8} {player.level:<8} {status:<15} {player.monsters_killed:<10}")
 
     print("-" * 80)
     print()
@@ -1368,6 +1429,8 @@ def print_battle_report(players: List[Player]):
         print(f"\n{player.name}:")
         print(f"  Final Floor:        {player.current_floor}")
         print(f"  Status:             {'Escaped at floor ' + str(player.escaped_floor) if player.escaped_floor else 'Reached the top!'}")
+        print(f"  Final Level:        {player.level} ({player.current_xp}/{player.get_xp_for_next_level()} XP)")
+        print(f"  Packs from Leveling: {player.packs_earned_from_leveling}")
         print(f"  Floors Cleared:     {player.floors_cleared}")
         print(f"  Monsters Killed:    {player.monsters_killed}")
         print(f"  Total Damage Dealt: {player.total_damage_dealt}")
@@ -1501,6 +1564,16 @@ def main():
 
             if won:
                 # Player beat the floor
+                # Gain XP and potentially level up
+                new_cards = player.gain_xp(floor, silent=True)
+
+                # Add new cards to player's deck if they leveled up
+                if new_cards:
+                    player.active_cards.extend(new_cards)
+                    player.deck.extend(new_cards)
+                    player._apply_card_bonuses()
+                    print(f"  ⚡ {player.name} leveled up to {player.level}! Gained {len(new_cards)} new card(s)!")
+
                 player.reset_for_floor()  # Heal for next floor
             else:
                 # Player escaped
