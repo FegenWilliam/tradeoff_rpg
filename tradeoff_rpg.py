@@ -1019,6 +1019,7 @@ def draw_cards_for_player() -> List[Card]:
 def select_cards_interactive(available_cards: List[Card]) -> List[Card]:
     """
     Allow player to select 10 cards from the 30 available.
+    Supports multi-select: enter multiple numbers separated by spaces or commas.
     """
     selected = []
     available = available_cards.copy()
@@ -1027,6 +1028,7 @@ def select_cards_interactive(available_cards: List[Card]) -> List[Card]:
     print("CARD SELECTION")
     print("="*60)
     print("You have 30 cards to choose from. Select 10 cards for your deck.")
+    print("TIP: Enter multiple numbers at once! (e.g., '1 5 7 12' or '1,5,7,12')")
     print()
 
     while len(selected) < 10:
@@ -1036,43 +1038,71 @@ def select_cards_interactive(available_cards: List[Card]) -> List[Card]:
             # Build stat display
             stats = []
             if card.hp_bonus != 0:
-                stats.append(f"HP: {card.hp_bonus:+d}")
+                stats.append(f"HP:{card.hp_bonus:+d}")
             if card.attack_bonus != 0:
-                stats.append(f"ATK: {card.attack_bonus:+d}")
+                stats.append(f"ATK:{card.attack_bonus:+d}")
             if card.defense_bonus != 0:
-                stats.append(f"DEF: {card.defense_bonus:+d}")
+                stats.append(f"DEF:{card.defense_bonus:+d}")
             if card.magic_attack_bonus != 0:
-                stats.append(f"MAG: {card.magic_attack_bonus:+d}")
+                stats.append(f"MAG:{card.magic_attack_bonus:+d}")
             if card.mana_bonus != 0:
-                stats.append(f"MANA: {card.mana_bonus:+d}")
+                stats.append(f"MANA:{card.mana_bonus:+d}")
             if card.mana_regen_bonus != 0:
-                stats.append(f"MREGEN: {card.mana_regen_bonus:+d}")
+                stats.append(f"MREG:{card.mana_regen_bonus:+d}")
             if card.crit_chance_bonus != 0:
-                stats.append(f"CRIT: {card.crit_chance_bonus:+.1f}%")
+                stats.append(f"CRIT:{card.crit_chance_bonus:+.1f}%")
             if card.crit_damage_bonus != 0:
-                stats.append(f"CDMG: {card.crit_damage_bonus:+.1%}")
+                stats.append(f"CDMG:{card.crit_damage_bonus:+.0%}")
             if card.dodge_chance_bonus != 0:
-                stats.append(f"DODGE: {card.dodge_chance_bonus:+.1f}%")
+                stats.append(f"DODGE:{card.dodge_chance_bonus:+.1f}%")
             if card.attack_speed_bonus != 0:
-                stats.append(f"SPD: {card.attack_speed_bonus:+.2f}")
+                stats.append(f"SPD:{card.attack_speed_bonus:+.2f}")
             if card.luck_bonus != 0:
-                stats.append(f"LUCK: {card.luck_bonus:+d}")
+                stats.append(f"LUCK:{card.luck_bonus:+d}")
 
-            stat_str = ", ".join(stats)
-            print(f"  {i:2d}. {card.name:30s} [{card.card_class.value:9s}] {stat_str}")
+            stat_str = " ".join(stats)
+            print(f"  {i:2d}. {card.name:25s} [{card.card_class.value[0].upper()}] {stat_str}")
 
+        remaining = 10 - len(selected)
         try:
-            choice = input(f"\nSelect card (1-{len(available)}): ").strip()
-            idx = int(choice) - 1
+            choice = input(f"\nSelect {remaining} card(s) (1-{len(available)}): ").strip()
 
-            if 0 <= idx < len(available):
-                chosen_card = available.pop(idx)
-                selected.append(chosen_card)
-                print(f"✓ Added {chosen_card.name}")
+            # Parse input - support both spaces and commas
+            choice = choice.replace(',', ' ')
+            numbers = choice.split()
+
+            # Convert to indices and validate
+            indices = []
+            for num in numbers:
+                idx = int(num) - 1
+                if 0 <= idx < len(available):
+                    indices.append(idx)
+                else:
+                    print(f"Invalid number: {num} (out of range)")
+                    indices = []
+                    break
+
+            # Check for duplicates in selection
+            if len(indices) != len(set(indices)):
+                print("Error: You entered duplicate numbers. Try again.")
+                continue
+
+            # Check if we're selecting too many
+            if len(indices) > remaining:
+                print(f"Error: You can only select {remaining} more card(s). Try again.")
+                continue
+
+            if indices:
+                # Sort indices in reverse to remove from end first (avoid index shifting)
+                for idx in sorted(indices, reverse=True):
+                    chosen_card = available.pop(idx)
+                    selected.append(chosen_card)
+                    print(f"✓ Added {chosen_card.name}")
             else:
-                print("Invalid choice. Try again.")
+                print("Invalid input. Try again.")
+
         except (ValueError, IndexError):
-            print("Invalid input. Try again.")
+            print("Invalid input. Enter numbers separated by spaces or commas.")
 
     print("\n" + "="*60)
     print("FINAL DECK")
@@ -1100,38 +1130,9 @@ def main():
         name = input(f"Enter name for Player {i+1}: ")
         player = Player(name)
 
-        # Choose deck building mode
-        print(f"\nChoose deck mode for {name}:")
-        print("  1. Custom Build (draw 30 cards, choose 10)")
-        print("  2. Preset Deck (balanced, mage, warrior, or rogue)")
-
-        mode_choice = input("Enter choice (1-2): ").strip()
-
-        if mode_choice == "1":
-            # New card selection system
-            available_cards = draw_cards_for_player()
-            deck = select_cards_interactive(available_cards)
-        else:
-            # Preset decks
-            print(f"\nChoose a preset deck for {name}:")
-            print("  1. Balanced (balanced stats)")
-            print("  2. Mage (high magic attack, mana regen)")
-            print("  3. Warrior (high HP and defense)")
-            print("  4. Rogue (high crit, dodge, attack speed)")
-
-            deck_choice = input("Enter choice (1-4): ").strip()
-            if deck_choice == "2":
-                deck = create_mage_deck()
-            elif deck_choice == "3":
-                deck = create_warrior_deck()
-            elif deck_choice == "4":
-                deck = create_rogue_deck()
-            else:
-                deck = create_starter_deck()
-
-            print(f"\n{player.name}'s deck:")
-            for card in deck:
-                print(f"  - {card}")
+        # Draw cards and build custom deck
+        available_cards = draw_cards_for_player()
+        deck = select_cards_interactive(available_cards)
 
         player.equip_deck(deck)
         players.append(player)
