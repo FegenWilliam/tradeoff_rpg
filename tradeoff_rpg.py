@@ -136,6 +136,7 @@ class Player:
         # Leveling system
         self.level = 1
         self.current_xp = 0
+        self.highest_floor = 0  # Best floor ever reached (for bonus packs)
 
     def equip_deck(self, cards: List[Card]):
         """Equip cards before entering the tower."""
@@ -354,12 +355,23 @@ class Player:
         # floor 3: 100 * 1.1^2 = 121
         return int(100 * (1.1 ** (floor - 1)))
 
+    def get_floor_bonus_packs(self) -> int:
+        """Calculate bonus packs from highest floor reached."""
+        # +1 pack per 50 floors (floor 100 = +2, floor 500 = +10)
+        return self.highest_floor // 50
+
     def get_max_packs(self) -> int:
-        """Calculate max packs player can open based on level."""
+        """Calculate max packs player can open based on level and highest floor."""
+        # Base packs from level
         if self.level < 20:
-            return 9 + self.level  # Level 1 = 10, Level 2 = 11, etc.
+            base_packs = 9 + self.level  # Level 1 = 10, Level 2 = 11, etc.
         else:
-            return 30  # Level 20 = 30 (gets +2 instead of +1)
+            base_packs = 30  # Level 20 = 30 (gets +2 instead of +1)
+
+        # Add bonus from highest floor
+        floor_bonus = self.get_floor_bonus_packs()
+
+        return base_packs + floor_bonus
 
     def gain_xp(self, floor: int, silent: bool = False) -> bool:
         """
@@ -1422,11 +1434,20 @@ def print_battle_report(players: List[Player]):
     print("="*80)
 
     for player in sorted_players:
+        # Calculate pack breakdown
+        if player.level < 20:
+            level_packs = 9 + player.level
+        else:
+            level_packs = 30
+        floor_bonus_packs = player.get_floor_bonus_packs()
+        total_packs = player.get_max_packs()
+
         print(f"\n{player.name}:")
         print(f"  Final Floor:        {player.current_floor}")
         print(f"  Status:             {'Escaped at floor ' + str(player.escaped_floor) if player.escaped_floor else 'Reached the top!'}")
+        print(f"  Highest Floor Ever: {player.highest_floor}")
         print(f"  Final Level:        {player.level} ({player.current_xp}/{player.get_xp_for_next_level()} XP)")
-        print(f"  Next Run Packs:     {player.get_max_packs()}")
+        print(f"  Next Run Packs:     {total_packs} (Level: {level_packs}, Floor Bonus: +{floor_bonus_packs})")
         print(f"  Floors Cleared:     {player.floors_cleared}")
         print(f"  Monsters Killed:    {player.monsters_killed}")
         print(f"  Total Damage Dealt: {player.total_damage_dealt}")
@@ -1577,6 +1598,14 @@ def main():
                 player.reset_for_floor()  # Heal for next floor
             else:
                 # Player escaped
+                # Update highest floor if this is a new record
+                if player.current_floor > player.highest_floor:
+                    old_highest = player.highest_floor
+                    player.highest_floor = player.current_floor
+                    bonus_increase = player.highest_floor // 50 - old_highest // 50
+                    if bonus_increase > 0:
+                        print(f"  🏆 New record! Floor {player.highest_floor} (+{bonus_increase} bonus pack(s) next run)")
+
                 active_players.remove(player)
                 print(f"  ⚠️  {player.name} escaped at floor {player.current_floor}!")
 
@@ -1587,6 +1616,11 @@ def main():
         if floor >= Tower.MAX_FLOORS:
             print("\n  🎉 TOP OF THE TOWER REACHED!")
             break
+
+    # Update highest floor for all players before final report
+    for player in players:
+        if player.current_floor > player.highest_floor:
+            player.highest_floor = player.current_floor
 
     # Final results - BATTLE REPORT
     print_battle_report(players)
