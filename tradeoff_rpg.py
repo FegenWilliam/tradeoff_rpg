@@ -149,11 +149,31 @@ class Player:
         # Currency system
         self.bounty = 0  # Gained per monster kill, persists across runs
 
+        # Ascension Cards (unlocked at level 10 and 20)
+        self.ascension_slots = []  # List of equipped ascension card names
+        self.has_ancestral_rage = False
+        self.has_impaler = False
+        self.has_blood_magic = False
+        self.has_blind_master = False
+        self.has_finishing_strike = False
+
+        # Ancestral Rage state (different from Berserker's Rage)
+        self.ancestral_rage_stacks = 0  # Rage stacks from Ancestral Rage
+
     def equip_deck(self, cards: List[Card]):
         """Equip cards before entering the tower."""
         self.deck = cards
         self.active_cards = cards.copy()
+        self._apply_ascension_cards()
         self._apply_card_bonuses()
+
+    def _apply_ascension_cards(self):
+        """Detect which ascension cards are equipped."""
+        self.has_ancestral_rage = "Ancestral Rage" in self.ascension_slots
+        self.has_impaler = "Impaler" in self.ascension_slots
+        self.has_blood_magic = "Blood Magic" in self.ascension_slots
+        self.has_blind_master = "Blind Master" in self.ascension_slots
+        self.has_finishing_strike = "Finishing Strike" in self.ascension_slots
 
     def _apply_card_bonuses(self):
         """Apply all stat bonuses from equipped cards, including unique card effects."""
@@ -226,6 +246,12 @@ class Player:
         # Berserker's Rage: -50 HP penalty (already applied via hp_bonus in card)
         # Rage stacking is handled dynamically in combat
 
+        # Apply Ascension Card effects
+        # Blind Master: +100% dodge chance, cannot deal critical hits
+        if self.has_blind_master:
+            self.dodge_chance += 100.0
+            self.crit_chance = 0.0
+
         self.current_hp = min(self.current_hp, self.max_hp)
         self.current_mana = min(self.current_mana, self.max_mana)
 
@@ -283,7 +309,21 @@ class Player:
         weapon_damage = sum(card.damage for card in self.active_cards
                           if card.card_type == CardType.WEAPON)
         rage_bonus = self.rage_stacks * 5 if self.has_berserkers_rage else 0
-        return self.attack + weapon_damage + rage_bonus
+
+        # Ancestral Rage: bonus from stacks
+        ancestral_rage_bonus = self.ancestral_rage_stacks * 5 if self.has_ancestral_rage else 0
+
+        return self.attack + weapon_damage + rage_bonus + ancestral_rage_bonus
+
+    def get_attack_speed(self) -> float:
+        """Calculate attack speed including Ancestral Rage bonus."""
+        speed = self.attack_speed
+
+        # Ancestral Rage: +0.1 speed per 5 stacks
+        if self.has_ancestral_rage:
+            speed += (self.ancestral_rage_stacks // 5) * 0.1
+
+        return speed
 
     def regenerate_mana(self):
         """Regenerate mana at the start of each turn."""
@@ -376,6 +416,7 @@ class Player:
         self.reactive_armor_active = False  # Reset Reactive Armor between floors
         self.rage_stacks = 0  # Reset Berserker's Rage stacks between floors
         self.shield = 0  # Reset Barrier shield between floors
+        self.ancestral_rage_stacks = 0  # Reset Ancestral Rage stacks between floors
 
     def get_xp_for_next_level(self) -> int:
         """Calculate XP required to reach the next level."""
@@ -439,6 +480,12 @@ class Player:
                 print(f"  🎉 LEVEL UP! {self.name} reached level {self.level}!")
                 print(f"  📦 Max packs increased by +{pack_increase}! (Next run: {new_max_packs} packs)")
 
+                # Check for ascension card unlock
+                if self.level == 10:
+                    print(f"  🌟 ASCENSION CARD SLOT 1 UNLOCKED! Choose your first ascension card next run!")
+                elif self.level == 20:
+                    print(f"  🌟 ASCENSION CARD SLOT 2 UNLOCKED! Choose your second ascension card next run!")
+
         return leveled_up
 
     def gain_bounty(self, amount: int = 1, silent: bool = False):
@@ -493,6 +540,7 @@ class Enemy:
 
         # Combat state
         self.dodged_last_attack = False
+        self.impaled = False  # Impale status from Impaler ascension card
 
     def _generate_name(self) -> str:
         """Generate enemy name based on floor and type."""
@@ -751,10 +799,10 @@ class Combat:
     Combat system for player vs enemies with full RPG mechanics.
     """
     @staticmethod
-    def _perform_attack(attacker, defender, damage: int, attack_type: str = "physical", silent: bool = False) -> Tuple[bool, int]:
+    def _perform_attack(attacker, defender, damage: int, attack_type: str = "physical", silent: bool = False) -> Tuple[bool, int, bool]:
         """
         Perform a single attack with dodge and crit mechanics.
-        Returns (defender_defeated, actual_damage_dealt).
+        Returns (defender_defeated, actual_damage_dealt, is_crit).
         """
         attacker_name = attacker.name if hasattr(attacker, 'name') else str(attacker)
         defender_name = defender.name if hasattr(defender, 'name') else str(defender)
@@ -765,7 +813,7 @@ class Combat:
         if dodged:
             if not silent:
                 print(f"  💨 {defender_name} DODGED the attack!")
-            return False, 0
+            return False, 0, False
 
         # If attack wasn't dodged, reset the dodge flag
         defender.dodged_last_attack = False
@@ -794,7 +842,7 @@ class Combat:
         else:
             defeated = defender.take_damage(final_damage)
 
-        return defeated, final_damage
+        return defeated, final_damage, is_crit
 
     @staticmethod
     def battle(player: Player, enemies: List[Enemy], silent: bool = False) -> bool:
@@ -831,11 +879,12 @@ class Combat:
                 enemy.regenerate_mana()
 
             # Player turn - attack speed determines number of attacks
-            num_attacks = int(player.attack_speed)
-            has_partial_attack = (player.attack_speed % 1) > 0
+            player_speed = player.get_attack_speed()
+            num_attacks = int(player_speed)
+            has_partial_attack = (player_speed % 1) > 0
 
             # If there's a fractional part, check if we get a bonus attack
-            if has_partial_attack and random.random() < (player.attack_speed % 1):
+            if has_partial_attack and random.random() < (player_speed % 1):
                 num_attacks += 1
 
             for attack_num in range(num_attacks):
@@ -844,37 +893,110 @@ class Combat:
 
                 target = enemies[0]
 
-                # Mana Amplifier: Special attack mechanic
-                if player.has_mana_amplifier:
-                    mana_cost = int(player.max_mana * 0.5)
-                    if player.current_mana >= mana_cost:
-                        damage = player.magic_attack * 3
-                        player.current_mana -= mana_cost
-                        attack_type = "magic"
-                        if not silent:
-                            print(f"  ⚡ Mana Amplifier: Consuming {mana_cost} mana for 3x magic damage!")
-                    else:
-                        # Not enough mana for Mana Amplifier, skip attack
-                        if not silent:
-                            print(f"  ⚠️ Not enough mana for Mana Amplifier! ({player.current_mana}/{mana_cost})")
-                        continue
+                # Initialize variables
+                attack_type = "physical"  # Default
+                defeated = False
+                damage_dealt = 0
+
+                # Finishing Strike: Instant kill if enemy below 10% HP
+                if player.has_finishing_strike and target.current_hp <= target.max_hp * 0.1:
+                    if not silent:
+                        print(f"  💀 Finishing Strike! {target.name} is below 10% HP - instant kill!")
+                    target.current_hp = 0
+                    defeated = True
+                    damage_dealt = 0
                 else:
-                    # Normal attack logic
-                    # Decide between physical and magic attack
-                    # Use magic if we have mana and magic attack is higher
-                    use_magic = (player.magic_attack > 0 and
-                               player.current_mana >= 20 and
-                               player.magic_attack > player.get_weapon_damage())
-
-                    if use_magic:
-                        damage = player.magic_attack
-                        player.current_mana -= 20
-                        attack_type = "magic"
+                    # Mana Amplifier: Special attack mechanic
+                    if player.has_mana_amplifier:
+                        mana_cost = int(player.max_mana * 0.5)
+                        if player.current_mana >= mana_cost:
+                            damage = player.magic_attack * 3
+                            player.current_mana -= mana_cost
+                            attack_type = "magic"
+                            if not silent:
+                                print(f"  ⚡ Mana Amplifier: Consuming {mana_cost} mana for 3x magic damage!")
+                        else:
+                            # Blood Magic: Use HP as mana if we have it
+                            if player.has_blood_magic and player.current_hp > 1:
+                                hp_cost = mana_cost - player.current_mana
+                                if player.current_hp - hp_cost > 1:
+                                    # Use remaining mana + HP
+                                    hp_to_use = hp_cost
+                                    player.current_mana = 0
+                                    player.current_hp -= hp_to_use
+                                    damage = player.magic_attack * 3
+                                    attack_type = "magic"
+                                    if not silent:
+                                        print(f"  🩸 Blood Magic! Using {hp_to_use} HP as mana!")
+                                        print(f"  ⚡ Mana Amplifier: Consuming mana for 3x magic damage!")
+                                else:
+                                    # Not enough HP+mana for Mana Amplifier, skip attack
+                                    if not silent:
+                                        print(f"  ⚠️ Not enough mana/HP for Mana Amplifier!")
+                                    continue
+                            else:
+                                # Not enough mana for Mana Amplifier, skip attack
+                                if not silent:
+                                    print(f"  ⚠️ Not enough mana for Mana Amplifier! ({player.current_mana}/{mana_cost})")
+                                continue
                     else:
-                        damage = player.get_weapon_damage()
-                        attack_type = "physical"
+                        # Normal attack logic
+                        # Decide between physical and magic attack
+                        # Use magic if we have mana and magic attack is higher
+                        use_magic = (player.magic_attack > 0 and
+                                   player.current_mana >= 20 and
+                                   player.magic_attack > player.get_weapon_damage())
 
-                defeated, damage_dealt = Combat._perform_attack(player, target, damage, attack_type, silent=silent)
+                        # Blood Magic: Use HP if out of mana
+                        if use_magic and player.current_mana < 20:
+                            if player.has_blood_magic and player.current_hp > 1:
+                                hp_cost = 20 - player.current_mana
+                                if player.current_hp - hp_cost > 1:
+                                    # Use remaining mana + HP
+                                    hp_to_use = hp_cost
+                                    player.current_mana = 0
+                                    player.current_hp -= hp_to_use
+                                    damage = player.magic_attack
+                                    attack_type = "magic"
+                                    if not silent:
+                                        print(f"  🩸 Blood Magic! Using {hp_to_use} HP as mana!")
+                                else:
+                                    # Not enough HP, fall back to physical
+                                    use_magic = False
+
+                        if use_magic and player.current_mana >= 20:
+                            damage = player.magic_attack
+                            player.current_mana -= 20
+                            attack_type = "magic"
+                        else:
+                            damage = player.get_weapon_damage()
+                            attack_type = "physical"
+
+                    # Check for Impale from previous crit
+                    impale_damage = 0
+                    if player.has_impaler and target.impaled:
+                        impale_damage = int(damage * 0.7)
+                        target.impaled = False  # Consume impale
+                        if not silent:
+                            print(f"  🗡️ Impale triggers! Additional hit for {impale_damage} damage (70% of main hit)")
+
+                    defeated, damage_dealt, is_crit = Combat._perform_attack(player, target, damage, attack_type, silent=silent)
+
+                    # Apply impale damage if the enemy survived the main hit
+                    if impale_damage > 0 and not defeated:
+                        actual_impale_damage = max(1, impale_damage - target.defense)
+                        target.current_hp -= actual_impale_damage
+                        player.total_damage_dealt += actual_impale_damage
+                        if not silent:
+                            print(f"  🗡️ Impale deals {actual_impale_damage} damage!")
+                        if target.current_hp <= 0:
+                            defeated = True
+
+                    # Impaler: Apply impale on crit (for next hit)
+                    if player.has_impaler and is_crit and not defeated:
+                        target.impaled = True
+                        if not silent:
+                            print(f"  🗡️ Impale applied! Next hit will deal +70% damage")
 
                 # Berserker's Rage: Gain rage on successful physical hit
                 if player.has_berserkers_rage and attack_type == "physical" and damage_dealt > 0:
@@ -882,6 +1004,13 @@ class Combat:
                         player.rage_stacks += 1
                         if not silent:
                             print(f"  🔥 Rage +1! (Rage: {player.rage_stacks}/50, Bonus: +{player.rage_stacks * 5} Attack)")
+
+                # Ancestral Rage: Gain rage on successful physical hit
+                if player.has_ancestral_rage and attack_type == "physical" and damage_dealt > 0:
+                    player.ancestral_rage_stacks += 1
+                    speed_bonus = (player.ancestral_rage_stacks // 5) * 0.1
+                    if not silent:
+                        print(f"  ⚡ Ancestral Rage +1! (Stacks: {player.ancestral_rage_stacks}, +{player.ancestral_rage_stacks * 5} Attack, +{speed_bonus:.1f} Speed)")
 
                 if defeated:
                     if not silent:
@@ -918,7 +1047,7 @@ class Combat:
                         damage = enemy.attack
                         attack_type = "physical"
 
-                    defeated, damage_dealt = Combat._perform_attack(enemy, player, damage, attack_type, silent=silent)
+                    defeated, damage_dealt, _ = Combat._perform_attack(enemy, player, damage, attack_type, silent=silent)
                     if defeated:
                         if not silent:
                             print(f"\n💀 {player.name} HP dropped to 1! AUTO-ESCAPE activated!")
@@ -1581,6 +1710,12 @@ def print_battle_report(players: List[Player]):
         print(f"  Final Level:        {player.level} ({player.current_xp}/{player.get_xp_for_next_level()} XP)")
         print(f"  Next Run Packs:     {total_packs} (Level: {level_packs}, Floor Bonus: +{floor_bonus_packs})")
         print(f"  Bounty:             {player.bounty} 💰")
+
+        # Show ascension cards
+        if len(player.ascension_slots) > 0:
+            ascension_str = ", ".join(player.ascension_slots)
+            print(f"  Ascension Cards:    {ascension_str}")
+
         print(f"  Floors Cleared:     {player.floors_cleared}")
         print(f"  Monsters Killed:    {player.monsters_killed}")
         print(f"  Total Damage Dealt: {player.total_damage_dealt}")
@@ -1686,6 +1821,133 @@ def select_packs_interactive(player: Player) -> List[Card]:
         print(f"  - {card.name}")
 
     return selected_cards
+
+
+def get_ascension_cards() -> dict:
+    """
+    Get the list of available ascension cards with their descriptions.
+    Returns a dictionary mapping card names to descriptions.
+    """
+    return {
+        "Ancestral Rage": "Gain 1 Rage Stack per physical hit. Rage gives +5 Attack per stack. Rage also gives bonus to speed at +0.1 per 5 stacks.",
+        "Impaler": "Critical Hits Impale Enemies. Impaled enemies take an additional 70% damage on the next hit (effectively 170% damage total).",
+        "Blood Magic": "Use HP as mana when out of mana. Won't kill you - minimum HP is 1, and you must have HP > 1 to use this ability.",
+        "Blind Master": "+100% Dodge Chance, cannot deal critical hits.",
+        "Finishing Strike": "Physical attacks instantly kill enemies below 10% HP."
+    }
+
+
+def select_ascension_card_interactive(player: Player, slot_number: int) -> str:
+    """
+    Interactive selection of an ascension card for a specific slot.
+    Returns the selected card name.
+    """
+    ascension_cards = get_ascension_cards()
+    card_names = list(ascension_cards.keys())
+
+    print("\n" + "="*60)
+    print(f"ASCENSION CARD SELECTION - SLOT {slot_number}")
+    print("="*60)
+    print(f"Level {player.level}: Choose your ascension card!")
+    print("\nAvailable Ascension Cards:")
+    print()
+
+    for i, (name, desc) in enumerate(ascension_cards.items(), 1):
+        print(f"{i}. {name}")
+        print(f"   {desc}")
+        print()
+
+    while True:
+        try:
+            choice = input(f"Select ascension card (1-{len(card_names)}): ").strip()
+            idx = int(choice) - 1
+
+            if 0 <= idx < len(card_names):
+                selected = card_names[idx]
+                confirm = input(f"Confirm '{selected}'? [y/n]: ").strip().lower()
+                if confirm == 'y':
+                    print(f"\n✓ {selected} selected for Slot {slot_number}!")
+                    return selected
+            else:
+                print(f"Invalid choice. Enter a number between 1 and {len(card_names)}.")
+        except ValueError:
+            print("Invalid input. Enter a number.")
+
+
+def change_ascension_card_interactive(player: Player) -> bool:
+    """
+    Interactive menu to change ascension cards for 100 bounty each.
+    Returns True if any changes were made.
+    """
+    ascension_cards = get_ascension_cards()
+    card_names = list(ascension_cards.keys())
+    changes_made = False
+
+    print("\n" + "="*60)
+    print("CHANGE ASCENSION CARDS")
+    print("="*60)
+    print(f"Current Bounty: {player.bounty} 💰")
+    print(f"Cost to change: 100 bounty per slot")
+    print()
+
+    # Show current ascension cards
+    print("Current Ascension Cards:")
+    for i, card in enumerate(player.ascension_slots, 1):
+        print(f"  Slot {i}: {card}")
+    print()
+
+    if player.bounty < 100:
+        print("Not enough bounty to change ascension cards!")
+        return False
+
+    while player.bounty >= 100:
+        print("\nWhich slot do you want to change?")
+        for i, card in enumerate(player.ascension_slots, 1):
+            print(f"  {i}. Slot {i}: {card}")
+        print(f"  0. Done (Exit)")
+        print()
+
+        try:
+            choice = input("Select slot to change (or 0 to exit): ").strip()
+            slot_idx = int(choice)
+
+            if slot_idx == 0:
+                break
+
+            if 1 <= slot_idx <= len(player.ascension_slots):
+                # Show available cards
+                print(f"\nChanging Slot {slot_idx} (current: {player.ascension_slots[slot_idx-1]})")
+                print("\nAvailable Ascension Cards:")
+                for i, (name, desc) in enumerate(ascension_cards.items(), 1):
+                    print(f"{i}. {name}")
+                    print(f"   {desc}")
+                    print()
+
+                card_choice = input(f"Select new card (1-{len(card_names)}): ").strip()
+                card_idx = int(card_choice) - 1
+
+                if 0 <= card_idx < len(card_names):
+                    new_card = card_names[card_idx]
+                    old_card = player.ascension_slots[slot_idx-1]
+
+                    if new_card == old_card:
+                        print("That's the same card! No change needed.")
+                    else:
+                        confirm = input(f"Change '{old_card}' to '{new_card}' for 100 bounty? [y/n]: ").strip().lower()
+                        if confirm == 'y':
+                            player.bounty -= 100
+                            player.ascension_slots[slot_idx-1] = new_card
+                            changes_made = True
+                            print(f"\n✓ Slot {slot_idx} changed to {new_card}!")
+                            print(f"Remaining Bounty: {player.bounty} 💰")
+                else:
+                    print(f"Invalid choice. Enter a number between 1 and {len(card_names)}.")
+            else:
+                print(f"Invalid slot. Enter a number between 1 and {len(player.ascension_slots)}.")
+        except ValueError:
+            print("Invalid input. Enter a number.")
+
+    return changes_made
 
 
 def create_bounty_shop_inventory() -> List[Tuple[Card, int]]:
@@ -1827,7 +2089,27 @@ def main():
         name = input(f"Enter name for Player {i+1}: ")
         player = Player(name)
 
-        # Visit bounty shop first
+        # Check for ascension card unlocks based on level
+        num_slots_needed = 0
+        if player.level >= 20:
+            num_slots_needed = 2
+        elif player.level >= 10:
+            num_slots_needed = 1
+
+        # Select ascension cards if player has unlocked slots but hasn't selected them
+        if num_slots_needed > len(player.ascension_slots):
+            for slot in range(len(player.ascension_slots) + 1, num_slots_needed + 1):
+                print(f"\n🌟 You've unlocked Ascension Card Slot {slot}!")
+                selected_card = select_ascension_card_interactive(player, slot)
+                player.ascension_slots.append(selected_card)
+
+        # Offer to change ascension cards if player has any and enough bounty
+        if len(player.ascension_slots) > 0 and player.bounty >= 100:
+            change_choice = input("\nDo you want to change your ascension cards? (100 bounty each) [y/n]: ").strip().lower()
+            if change_choice == 'y':
+                change_ascension_card_interactive(player)
+
+        # Visit bounty shop
         shop_cards = bounty_shop_interactive(player)
 
         # Select and open packs to build deck (based on player level)
