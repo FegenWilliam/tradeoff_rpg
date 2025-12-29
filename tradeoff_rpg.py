@@ -29,6 +29,7 @@ class WeaponType(Enum):
     """Types of weapons with different dual wielding rules."""
     SWORD = "sword"  # Can dual wield by default
     WAND = "wand"  # Can dual wield by default
+    SHIELD = "shield"  # Can dual wield by default (secondary weapon)
     GREATSWORD = "greatsword"  # Requires Titan's Strength for dual wield
     AXE = "axe"  # Requires Titan's Strength for dual wield
     SPEAR = "spear"  # Requires Titan's Strength for dual wield
@@ -232,8 +233,8 @@ class Player:
                 continue  # Single weapon is always OK
 
             # Check dual wielding rules
-            if weapon_type in [WeaponType.SWORD, WeaponType.WAND]:
-                # Swords and Wands can always be dual wielded
+            if weapon_type in [WeaponType.SWORD, WeaponType.WAND, WeaponType.SHIELD]:
+                # Swords, Wands, and Shields can always be dual wielded
                 if count > 2:
                     errors.append(f"Cannot equip more than 2 {weapon_type.value}s (found {count})")
 
@@ -1443,33 +1444,44 @@ def create_equipment_card_pool() -> List[Card]:
 
     # Weapons - Base Attack (5 cards)
     weapons = [
-        ("Sword", 60, "A balanced weapon for physical combat", WeaponType.SWORD),
-        ("Greatsword", 80, "A powerful two-handed weapon, deals high damage", WeaponType.GREATSWORD),
-        ("Dagger", 40, "A quick weapon for fast strikes", WeaponType.DAGGER),
-        ("Axe", 70, "A heavy weapon with crushing power", WeaponType.AXE),
-        ("Spear", 55, "A reach weapon with good attack", WeaponType.SPEAR),
+        ("Sword", 60, "A balanced weapon for physical combat", WeaponType.SWORD, 1.0),
+        ("Greatsword", 140, "A powerful two-handed weapon, deals high damage", WeaponType.GREATSWORD, 0.7),
+        ("Dagger", 40, "A quick weapon for fast strikes", WeaponType.DAGGER, 1.5),
+        ("Axe", 90, "A heavy weapon with crushing power", WeaponType.AXE, 0.9),
+        ("Spear", 60, "A reach weapon with good attack", WeaponType.SPEAR, 1.2),
     ]
-    for name, attack, desc, wtype in weapons:
+    for name, attack, desc, wtype, aspd in weapons:
         cards.append(Card(
             name, CardType.WEAPON, CardClass.EQUIPMENT,
             desc,
             attack_bonus=attack,
-            weapon_type=wtype
+            weapon_type=wtype,
+            attack_speed_bonus=aspd
         ))
 
     # Magic Weapons - Base Magic Attack (3 cards)
     magic_weapons = [
-        ("Staff", 60, "A magical staff for spellcasting", WeaponType.STAFF),
-        ("Wand", 45, "A quick magic weapon", WeaponType.WAND),
-        ("Tome", 75, "An ancient spellbook with powerful magic", WeaponType.TOME),
+        ("Staff", 60, "A magical staff for spellcasting", WeaponType.STAFF, 1.0),
+        ("Wand", 45, "A quick magic weapon", WeaponType.WAND, 1.3),
+        ("Tome", 75, "An ancient spellbook with powerful magic", WeaponType.TOME, 0.8),
     ]
-    for name, magic, desc, wtype in magic_weapons:
+    for name, magic, desc, wtype, aspd in magic_weapons:
         cards.append(Card(
             name, CardType.WEAPON, CardClass.EQUIPMENT,
             desc,
             magic_attack_bonus=magic,
-            weapon_type=wtype
+            weapon_type=wtype,
+            attack_speed_bonus=aspd
         ))
+
+    # Secondary Weapons - Defensive (1 card)
+    cards.append(Card(
+        "Shield", CardType.WEAPON, CardClass.EQUIPMENT,
+        "A sturdy shield for defense",
+        defense_bonus=10,
+        weapon_type=WeaponType.SHIELD,
+        attack_speed_bonus=1.0
+    ))
 
     # Armor - Base Defense (4 cards)
     armors = [
@@ -1485,9 +1497,8 @@ def create_equipment_card_pool() -> List[Card]:
             defense_bonus=defense
         ))
 
-    # Hybrid Equipment (3 cards)
+    # Hybrid Equipment (2 cards)
     hybrids = [
-        ("Shield", 0, "A sturdy shield", 25, 50),  # defense, hp
         ("Battle Armor", 0, "Armor designed for combat", 28, 30),  # defense, hp
         ("Mystic Robe", 0, "Enchanted robes", 12, 0),  # defense, mana
     ]
