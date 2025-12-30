@@ -4,6 +4,7 @@ A competitive game where up to 4 players climb a 1000-floor tower using card-bas
 """
 
 import random
+import json
 from enum import Enum
 from typing import List, Optional, Tuple
 
@@ -680,6 +681,108 @@ class Player:
     def __str__(self):
         status = "ESCAPED" if not self.is_alive else "CLIMBING"
         return f"{self.name} - Floor {self.current_floor} [{status}] HP: {self.current_hp}/{self.max_hp}"
+
+
+# Save/Load System
+def card_to_dict(card: Card) -> dict:
+    """Convert a Card object to a dictionary for JSON serialization."""
+    return {
+        'name': card.name,
+        'card_type': card.card_type.value if card.card_type else None,
+        'card_class': card.card_class.value if card.card_class else None,
+        'description': card.description,
+        'hp_bonus': card.hp_bonus,
+        'attack_bonus': card.attack_bonus,
+        'defense_bonus': card.defense_bonus,
+        'magic_attack_bonus': card.magic_attack_bonus,
+        'mana_bonus': card.mana_bonus,
+        'mana_regen_bonus': card.mana_regen_bonus,
+        'crit_chance_bonus': card.crit_chance_bonus,
+        'crit_damage_bonus': card.crit_damage_bonus,
+        'dodge_chance_bonus': card.dodge_chance_bonus,
+        'attack_speed_bonus': card.attack_speed_bonus,
+        'luck_bonus': card.luck_bonus,
+        'weapon_type': card.weapon_type.value if card.weapon_type else None,
+        'accessory_type': card.accessory_type.value if card.accessory_type else None,
+        'damage': card.damage,
+        'magic_damage': card.magic_damage,
+        'mana_cost': card.mana_cost,
+        'special_effect': card.special_effect,
+        'spawn_condition': card.spawn_condition
+    }
+
+
+def dict_to_card(card_dict: dict) -> Card:
+    """Convert a dictionary back to a Card object."""
+    card = Card(
+        name=card_dict['name'],
+        card_type=CardType(card_dict['card_type']) if card_dict['card_type'] else None,
+        card_class=CardClass(card_dict['card_class']) if card_dict['card_class'] else None,
+        description=card_dict['description'],
+        hp_bonus=card_dict['hp_bonus'],
+        attack_bonus=card_dict['attack_bonus'],
+        defense_bonus=card_dict['defense_bonus'],
+        magic_attack_bonus=card_dict['magic_attack_bonus'],
+        mana_bonus=card_dict['mana_bonus'],
+        mana_regen_bonus=card_dict['mana_regen_bonus'],
+        crit_chance_bonus=card_dict['crit_chance_bonus'],
+        crit_damage_bonus=card_dict['crit_damage_bonus'],
+        dodge_chance_bonus=card_dict['dodge_chance_bonus'],
+        attack_speed_bonus=card_dict['attack_speed_bonus'],
+        luck_bonus=card_dict['luck_bonus'],
+        weapon_type=WeaponType(card_dict['weapon_type']) if card_dict['weapon_type'] else None,
+        accessory_type=AccessoryType(card_dict['accessory_type']) if card_dict['accessory_type'] else None,
+        damage=card_dict['damage'],
+        magic_damage=card_dict['magic_damage'],
+        mana_cost=card_dict['mana_cost'],
+        special_effect=card_dict['special_effect'],
+        spawn_condition=card_dict['spawn_condition']
+    )
+    return card
+
+
+def save_game(player: Player, filename: str = "save_game.json"):
+    """Save player progress to a JSON file."""
+    save_data = {
+        'name': player.name,
+        'level': player.level,
+        'current_xp': player.current_xp,
+        'highest_floor': player.highest_floor,
+        'bounty': player.bounty,
+        'ascension_slots': player.ascension_slots,
+        'deck': [card_to_dict(card) for card in player.deck]
+    }
+
+    with open(filename, 'w') as f:
+        json.dump(save_data, f, indent=2)
+
+    print(f"\n💾 Game saved to {filename}")
+
+
+def load_game(filename: str = "save_game.json") -> Optional[Player]:
+    """Load player progress from a JSON file."""
+    try:
+        with open(filename, 'r') as f:
+            save_data = json.load(f)
+
+        # Create player with saved data
+        player = Player(save_data['name'])
+        player.level = save_data['level']
+        player.current_xp = save_data['current_xp']
+        player.highest_floor = save_data['highest_floor']
+        player.bounty = save_data['bounty']
+        player.ascension_slots = save_data['ascension_slots']
+        player.deck = [dict_to_card(card_dict) for card_dict in save_data['deck']]
+
+        print(f"\n📂 Game loaded from {filename}")
+        print(f"   Level {player.level} | Bounty: {player.bounty} | Highest Floor: {player.highest_floor}")
+
+        return player
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        print(f"\n❌ Error loading save file: {e}")
+        return None
 
 
 class EnemyType(Enum):
@@ -2917,8 +3020,23 @@ def main():
 
     players = []
     for i in range(num_players):
-        name = input(f"Enter name for Player {i+1}: ")
-        player = Player(name)
+        # Ask if player wants to load a saved game
+        load_choice = input(f"\nPlayer {i+1}: Load saved game? [y/n]: ").strip().lower()
+
+        if load_choice == 'y':
+            # Try to load save file
+            save_filename = f"save_game_player{i+1}.json"
+            player = load_game(save_filename)
+
+            if player is None:
+                # No save file found, create new player
+                print("   No save file found. Creating new player.")
+                name = input(f"Enter name for Player {i+1}: ")
+                player = Player(name)
+        else:
+            # Create new player
+            name = input(f"Enter name for Player {i+1}: ")
+            player = Player(name)
 
         # Check for ascension card unlocks based on level
         num_slots_needed = 0
@@ -3020,6 +3138,16 @@ def main():
 
     # Final results - BATTLE REPORT
     print_battle_report(players)
+
+    # Save game option
+    print("\n" + "="*60)
+    print("SAVE GAME")
+    print("="*60)
+    for i, player in enumerate(players, 1):
+        save_choice = input(f"\nSave progress for {player.name}? [y/n]: ").strip().lower()
+        if save_choice == 'y':
+            save_filename = f"save_game_player{i}.json"
+            save_game(player, save_filename)
 
 
 if __name__ == "__main__":
