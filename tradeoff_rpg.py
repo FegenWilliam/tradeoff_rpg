@@ -2281,7 +2281,8 @@ def create_unique_card_pool() -> List[Card]:
     cards.append(Card(
         "Quick Meteor", CardType.PASSIVE, CardClass.UNIQUE,
         "Meteor now deals only 2x damage but has no channeling needed",
-        special_effect="quick_meteor"
+        special_effect="quick_meteor",
+        spawn_condition="has_meteor_spell"
     ))
 
     # 14. Spellblade (Magic Pack)
@@ -2458,6 +2459,10 @@ def check_spawn_condition(card: Card, player: 'Player') -> bool:
     if card.spawn_condition == "has_barrier_generation":
         # Check if player has any cards that generate barrier/shield
         return any(c.special_effect == "barrier" for c in player.active_cards)
+
+    if card.spawn_condition == "has_meteor_spell":
+        # Check if player has the Meteor spell
+        return any(c.special_effect == "meteor" for c in player.active_cards)
 
     # Unknown condition defaults to True
     return True
