@@ -741,43 +741,56 @@ def dict_to_card(card_dict: dict) -> Card:
     return card
 
 
-def save_game(player: Player, filename: str = "save_game.json"):
-    """Save player progress to a JSON file."""
+def save_game(players: List[Player], filename: str = "save_game.json"):
+    """Save all players' progress to a single JSON file."""
     save_data = {
-        'name': player.name,
-        'level': player.level,
-        'current_xp': player.current_xp,
-        'highest_floor': player.highest_floor,
-        'bounty': player.bounty,
-        'ascension_slots': player.ascension_slots,
-        'deck': [card_to_dict(card) for card in player.deck]
+        'num_players': len(players),
+        'players': []
     }
+
+    for player in players:
+        player_data = {
+            'name': player.name,
+            'level': player.level,
+            'current_xp': player.current_xp,
+            'highest_floor': player.highest_floor,
+            'bounty': player.bounty,
+            'ascension_slots': player.ascension_slots,
+            'deck': [card_to_dict(card) for card in player.deck]
+        }
+        save_data['players'].append(player_data)
 
     with open(filename, 'w') as f:
         json.dump(save_data, f, indent=2)
 
     print(f"\n💾 Game saved to {filename}")
+    print(f"   Saved {len(players)} player(s): {', '.join([p.name for p in players])}")
 
 
-def load_game(filename: str = "save_game.json") -> Optional[Player]:
-    """Load player progress from a JSON file."""
+def load_game(filename: str = "save_game.json") -> Optional[List[Player]]:
+    """Load all players' progress from a JSON file."""
     try:
         with open(filename, 'r') as f:
             save_data = json.load(f)
 
-        # Create player with saved data
-        player = Player(save_data['name'])
-        player.level = save_data['level']
-        player.current_xp = save_data['current_xp']
-        player.highest_floor = save_data['highest_floor']
-        player.bounty = save_data['bounty']
-        player.ascension_slots = save_data['ascension_slots']
-        player.deck = [dict_to_card(card_dict) for card_dict in save_data['deck']]
+        players = []
+        for player_data in save_data['players']:
+            # Create player with saved data
+            player = Player(player_data['name'])
+            player.level = player_data['level']
+            player.current_xp = player_data['current_xp']
+            player.highest_floor = player_data['highest_floor']
+            player.bounty = player_data['bounty']
+            player.ascension_slots = player_data['ascension_slots']
+            player.deck = [dict_to_card(card_dict) for card_dict in player_data['deck']]
+            players.append(player)
 
         print(f"\n📂 Game loaded from {filename}")
-        print(f"   Level {player.level} | Bounty: {player.bounty} | Highest Floor: {player.highest_floor}")
+        print(f"   {len(players)} player(s) loaded:")
+        for player in players:
+            print(f"   - {player.name}: Level {player.level} | Bounty: {player.bounty} | Highest Floor: {player.highest_floor}")
 
-        return player
+        return players
     except FileNotFoundError:
         return None
     except Exception as e:
@@ -3014,35 +3027,36 @@ def main():
     print("="*60)
     print()
 
-    # Setup players
-    num_players = int(input("Enter number of players (1-4): "))
-    num_players = max(1, min(4, num_players))
-
-    # Phase 1: Get all player names/load saves
+    # Phase 1: Load saved game or create new players
     print("\n" + "="*60)
     print("PLAYER SETUP")
     print("="*60)
-    players = []
-    for i in range(num_players):
-        # Ask if player wants to load a saved game
-        load_choice = input(f"\nPlayer {i+1}: Load saved game? [y/n]: ").strip().lower()
 
-        if load_choice == 'y':
-            # Try to load save file
-            save_filename = f"save_game_player{i+1}.json"
-            player = load_game(save_filename)
+    load_choice = input("\nLoad saved game? [y/n]: ").strip().lower()
 
-            if player is None:
-                # No save file found, create new player
-                print("   No save file found. Creating new player.")
+    if load_choice == 'y':
+        # Try to load save file
+        players = load_game("save_game.json")
+
+        if players is None:
+            # No save file found, create new players
+            print("   No save file found. Creating new game.")
+            num_players = int(input("\nEnter number of players (1-4): "))
+            num_players = max(1, min(4, num_players))
+
+            players = []
+            for i in range(num_players):
                 name = input(f"Enter name for Player {i+1}: ")
-                player = Player(name)
-        else:
-            # Create new player
-            name = input(f"Enter name for Player {i+1}: ")
-            player = Player(name)
+                players.append(Player(name))
+    else:
+        # Create new game
+        num_players = int(input("\nEnter number of players (1-4): "))
+        num_players = max(1, min(4, num_players))
 
-        players.append(player)
+        players = []
+        for i in range(num_players):
+            name = input(f"Enter name for Player {i+1}: ")
+            players.append(Player(name))
 
     # Phase 2: Each player does their prep in turns
     print("\n" + "="*60)
@@ -3085,7 +3099,16 @@ def main():
         player.equip_deck(deck)
 
     print("\n" + "="*60)
-    print("PREP PHASE COMPLETE - ENTERING AUTO-BATTLE MODE")
+    print("PREP PHASE COMPLETE")
+    print("="*60)
+
+    # Save option before entering tower
+    save_choice = input("\nSave game before entering tower? [y/n]: ").strip().lower()
+    if save_choice == 'y':
+        save_game(players, "save_game.json")
+
+    print("\n" + "="*60)
+    print("ENTERING AUTO-BATTLE MODE")
     print("="*60)
     print("\nAll players will now automatically enter the tower.")
     print("Battles will be simulated and results reported at the end.")
@@ -3157,11 +3180,9 @@ def main():
     print("\n" + "="*60)
     print("SAVE GAME")
     print("="*60)
-    for i, player in enumerate(players, 1):
-        save_choice = input(f"\nSave progress for {player.name}? [y/n]: ").strip().lower()
-        if save_choice == 'y':
-            save_filename = f"save_game_player{i}.json"
-            save_game(player, save_filename)
+    save_choice = input("\nSave game progress? [y/n]: ").strip().lower()
+    if save_choice == 'y':
+        save_game(players, "save_game.json")
 
 
 if __name__ == "__main__":
