@@ -1659,11 +1659,13 @@ class Combat:
                             print(f"  ⚡ Ancestral Rage +1! (Stacks: {player.ancestral_rage_stacks}/50, +{player.ancestral_rage_stacks * 5} Attack, +{speed_bonus:.1f} Speed)")
 
                 if defeated:
-                    if not silent:
-                        print(f"  ✓ {target.name} defeated!")
-                    player.monsters_killed += 1
-                    player.gain_bounty(1, silent=silent)  # Gain 1 bounty per monster kill
-                    enemies.pop(0)
+                    # Check if enemy still in list (spells handle their own removal)
+                    if enemies and enemies[0] == target:
+                        if not silent:
+                            print(f"  ✓ {target.name} defeated!")
+                        player.monsters_killed += 1
+                        player.gain_bounty(1, silent=silent)  # Gain 1 bounty per monster kill
+                        enemies.pop(0)
                     if not enemies:
                         if not silent:
                             print(f"\n🎉 {player.name} wins the battle!")
