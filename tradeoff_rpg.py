@@ -2592,11 +2592,13 @@ def get_compatible_weapon_types(equipped_weapons: List[Card]) -> List[WeaponType
         equipped_weapons: List of weapon cards already equipped during pack opening
 
     Returns:
-        List of WeaponType values that can be equipped, or None if no more weapons allowed
+        List of WeaponType values that can be equipped, or None if all types allowed
+        Note: Quiver is NEVER in the initial allowed list - it can only be equipped with a bow
     """
     if not equipped_weapons:
-        # No weapons equipped yet, all weapon types are allowed
-        return None
+        # No weapons equipped yet - all weapon types EXCEPT quiver are allowed
+        # Quiver requires a bow to be equipped first
+        return None  # None means we'll filter quivers separately
 
     # Get weapon types of currently equipped weapons
     weapon_types = [w.weapon_type for w in equipped_weapons if w.weapon_type]
@@ -2665,7 +2667,7 @@ def can_equip_weapon(card: Card, equipped_weapons: List[Card]) -> bool:
     return card.weapon_type in compatible_types
 
 
-def open_pack(pack_data: dict, player: Optional['Player'] = None) -> Card:
+def open_pack(pack_data: dict, player: Optional['Player'] = None, compatible_weapon_types: Optional[List[WeaponType]] = None, is_weapon_pack: bool = False) -> Card:
     """
     Open a pack and get 1 random card from it.
     Unique cards have a 5% drop rate.
@@ -2673,6 +2675,8 @@ def open_pack(pack_data: dict, player: Optional['Player'] = None) -> Card:
     Args:
         pack_data: Dictionary with 'common' and 'unique' card lists
         player: Optional player to check spawn conditions against
+        compatible_weapon_types: Optional list of compatible weapon types to filter by (None = no filter)
+        is_weapon_pack: Whether this is a weapon pack (applies quiver restrictions)
 
     Returns:
         A random card from the pack
@@ -2680,16 +2684,48 @@ def open_pack(pack_data: dict, player: Optional['Player'] = None) -> Card:
     common_cards = pack_data["common"]
     unique_cards = pack_data["unique"]
 
+    # Filter cards based on weapon compatibility if specified
+    if is_weapon_pack and compatible_weapon_types is not None:
+        # Filter common cards - keep non-weapons and compatible weapons
+        common_cards = [
+            card for card in common_cards
+            if card.card_type != CardType.WEAPON or card.weapon_type in compatible_weapon_types
+        ]
+        # Filter unique cards - keep non-weapons and compatible weapons
+        unique_cards = [
+            card for card in unique_cards
+            if card.card_type != CardType.WEAPON or card.weapon_type in compatible_weapon_types
+        ]
+    elif is_weapon_pack and compatible_weapon_types is None:
+        # Weapon pack, but no weapons equipped yet
+        # Allow all weapon types EXCEPT quiver (quiver requires bow first)
+        common_cards = [
+            card for card in common_cards
+            if card.card_type != CardType.WEAPON or card.weapon_type != WeaponType.QUIVER
+        ]
+        unique_cards = [
+            card for card in unique_cards
+            if card.card_type != CardType.WEAPON or card.weapon_type != WeaponType.QUIVER
+        ]
+
     # Filter unique cards based on spawn conditions
     if player:
         unique_cards = [card for card in unique_cards if check_spawn_condition(card, player)]
+
+    # If no cards left after filtering, return None (shouldn't happen with proper pack blocking)
+    if not common_cards and not unique_cards:
+        return None
 
     # 5% chance to get a unique card (if any exist in this pack and pass spawn conditions)
     if unique_cards and random.random() < 0.05:
         return random.choice(unique_cards)
 
     # Otherwise, get a common card
-    return random.choice(common_cards)
+    if common_cards:
+        return random.choice(common_cards)
+
+    # Fallback to unique if no common cards available
+    return random.choice(unique_cards) if unique_cards else None
 
 
 def print_battle_report(players: List[Player]):
@@ -2805,7 +2841,8 @@ def select_packs_interactive(player: Player) -> List[Card]:
     print("NOTE: Weapon restrictions apply - some weapons can't be equipped together!")
     print()
 
-    for pick_num in range(1, num_packs + 1):
+    pick_num = 1
+    while pick_num <= num_packs:
         print(f"\n--- Pick {pick_num}/{num_packs} ---")
 
         while True:
@@ -2816,86 +2853,70 @@ def select_packs_interactive(player: Player) -> List[Card]:
                 if 0 <= idx < len(pack_names):
                     pack_name = pack_names[idx]
 
-                    # Keep trying to draw a card until we get one that's compatible or user accepts
-                    max_attempts = 50  # Prevent infinite loop
-                    attempts = 0
+                    # Get currently equipped weapons
+                    equipped_weapons = [c for c in selected_cards if c.card_type == CardType.WEAPON]
+
+                    # Check if this is a weapon pack and we already have 2 weapons
+                    is_weapon_pack = pack_name in ["Physical Weapons", "Magic Weapons"]
+                    if is_weapon_pack and len(equipped_weapons) >= 2:
+                        print(f"   ⚠️  Cannot open {pack_name}! You already have 2 weapons equipped.")
+                        print(f"   Choose a different pack type.")
+                        continue  # Don't consume the pick, let player choose again
+
+                    # Determine compatible weapon types for filtering
+                    compatible_types = None
+                    if is_weapon_pack:
+                        compatible_types = get_compatible_weapon_types(equipped_weapons)
+                        # Empty list means no weapons allowed (shouldn't happen due to check above)
+                        if compatible_types is not None and len(compatible_types) == 0:
+                            print(f"   ⚠️  Cannot open {pack_name}! You already have 2 weapons equipped.")
+                            continue
+
+                    # Draw a card from the pack with weapon type filtering
+                    card = open_pack(packs[pack_name], player, compatible_types, is_weapon_pack)
+
+                    if card is None:
+                        print(f"   ⚠️  No compatible cards available in this pack.")
+                        continue
+
+                    # Show the card drawn
+                    unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
+                    print(f"✓ Opened {pack_name}! Got: {card.name}{unique_marker}")
+                    print(f"   {card.description}")
+
+                    # Offer reroll option
+                    while player.bounty >= 10:
+                        reroll_choice = input(f"Reroll this card? (10 bounty, current: {player.bounty}) [y/n]: ").strip().lower()
+                        if reroll_choice == 'y':
+                            player.bounty -= 10
+                            card = open_pack(packs[pack_name], player, compatible_types, is_weapon_pack)
+                            if card is None:
+                                print(f"   ⚠️  No compatible cards available in this pack.")
+                                break
+                            unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
+                            print(f"🔄 Rerolled! Got: {card.name}{unique_marker}")
+                            print(f"   {card.description}")
+                        elif reroll_choice == 'n':
+                            break
+                        else:
+                            print("Invalid input. Enter 'y' or 'n'.")
+
+                    # Ask if player wants to keep or discard the card
                     card_accepted = False
+                    while True:
+                        keep_choice = input(f"Keep this card? [y/n]: ").strip().lower()
+                        if keep_choice == 'y':
+                            selected_cards.append(card)
+                            card_accepted = True
+                            break
+                        elif keep_choice == 'n':
+                            print("   Card discarded. (Pack still consumed)")
+                            card_accepted = True
+                            break
+                        else:
+                            print("Invalid input. Enter 'y' or 'n'.")
 
-                    while attempts < max_attempts and not card_accepted:
-                        card = open_pack(packs[pack_name], player)
-                        attempts += 1
-
-                        # Show the card drawn
-                        unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
-                        print(f"✓ Opened {pack_name}! Got: {card.name}{unique_marker}")
-                        print(f"   {card.description}")
-
-                        # Check weapon compatibility
-                        equipped_weapons = [c for c in selected_cards if c.card_type == CardType.WEAPON]
-                        is_compatible = can_equip_weapon(card, equipped_weapons)
-
-                        if not is_compatible:
-                            # Get compatible weapon types for display
-                            compatible_types = get_compatible_weapon_types(equipped_weapons)
-                            if compatible_types is not None and len(compatible_types) > 0:
-                                compatible_names = [wt.value for wt in compatible_types]
-                                print(f"   ⚠️  INCOMPATIBLE WEAPON! You already have: {', '.join([w.name for w in equipped_weapons])}")
-                                print(f"   You can only equip: {', '.join(compatible_names)}")
-                            else:
-                                print(f"   ⚠️  INCOMPATIBLE WEAPON! You already have 2 weapons equipped.")
-                            print(f"   This card will be automatically discarded and rerolled.")
-                            # Automatically reroll incompatible weapons
-                            continue
-
-                        # Offer reroll option
-                        rerolled = False
-                        while player.bounty >= 10:
-                            reroll_choice = input(f"Reroll this card? (10 bounty, current: {player.bounty}) [y/n]: ").strip().lower()
-                            if reroll_choice == 'y':
-                                player.bounty -= 10
-                                card = open_pack(packs[pack_name], player)
-                                unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
-                                print(f"🔄 Rerolled! Got: {card.name}{unique_marker}")
-                                print(f"   {card.description}")
-
-                                # Check compatibility of rerolled card
-                                is_compatible = can_equip_weapon(card, equipped_weapons)
-                                if not is_compatible:
-                                    compatible_types = get_compatible_weapon_types(equipped_weapons)
-                                    if compatible_types is not None and len(compatible_types) > 0:
-                                        compatible_names = [wt.value for wt in compatible_types]
-                                        print(f"   ⚠️  INCOMPATIBLE WEAPON! You can only equip: {', '.join(compatible_names)}")
-                                    else:
-                                        print(f"   ⚠️  INCOMPATIBLE WEAPON! You already have 2 weapons equipped.")
-                                rerolled = True
-                            elif reroll_choice == 'n':
-                                break
-                            else:
-                                print("Invalid input. Enter 'y' or 'n'.")
-
-                        # If the card is still incompatible after rerolling, force reroll
-                        if not is_compatible:
-                            if rerolled:
-                                print("   Incompatible card will be rerolled automatically.")
-                            continue
-
-                        # Ask if player wants to keep or discard the card
-                        while True:
-                            keep_choice = input(f"Keep this card? [y/n]: ").strip().lower()
-                            if keep_choice == 'y':
-                                selected_cards.append(card)
-                                card_accepted = True
-                                break
-                            elif keep_choice == 'n':
-                                print("   Card discarded. (Pack still consumed)")
-                                card_accepted = True
-                                break
-                            else:
-                                print("Invalid input. Enter 'y' or 'n'.")
-
-                    if attempts >= max_attempts and not card_accepted:
-                        print("   Warning: Maximum reroll attempts reached. Skipping this pack.")
-
+                    pick_num += 1  # Increment only when pack is successfully consumed
                     break
                 else:
                     print(f"Invalid choice. Enter a number between 1 and {len(pack_names)}.")
