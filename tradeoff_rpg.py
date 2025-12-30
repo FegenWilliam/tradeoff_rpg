@@ -206,6 +206,7 @@ class Player:
 
         # Day tracking
         self.day = 1  # Tracks how many tower runs (days) have been completed
+        self.packs_remaining = 0  # Packs not yet opened (carries over if exiting menu early)
 
         # Ascension Cards (unlocked at level 10 and 20)
         self.ascension_slots = []  # List of equipped ascension card names
@@ -759,6 +760,7 @@ def save_game(players: List[Player], filename: str = "save_game.json"):
             'highest_floor': player.highest_floor,
             'bounty': player.bounty,
             'day': player.day,
+            'packs_remaining': player.packs_remaining,
             'ascension_slots': player.ascension_slots,
             'deck': [card_to_dict(card) for card in player.deck]
         }
@@ -786,6 +788,7 @@ def load_game(filename: str = "save_game.json") -> Optional[List[Player]]:
             player.highest_floor = player_data['highest_floor']
             player.bounty = player_data['bounty']
             player.day = player_data.get('day', 1)  # Default to 1 for backwards compatibility
+            player.packs_remaining = player_data.get('packs_remaining', 0)  # Default to 0 for backwards compatibility
             player.ascension_slots = player_data['ascension_slots']
             player.deck = [dict_to_card(card_dict) for card_dict in player_data['deck']]
             players.append(player)
@@ -2818,11 +2821,13 @@ def select_packs_interactive(player: Player) -> List[Card]:
     Enforces weapon compatibility restrictions during pack opening.
     """
     level = player.level
-    # Calculate number of packs based on level
+    # Calculate number of packs based on level + any remaining from previous session
     if level < 20:
-        num_packs = 9 + level
+        base_packs = 9 + level
     else:
-        num_packs = 30
+        base_packs = 30
+
+    num_packs = base_packs + player.packs_remaining
 
     packs = create_card_packs()
     pack_names = list(packs.keys())
@@ -2832,6 +2837,8 @@ def select_packs_interactive(player: Player) -> List[Card]:
     print("PACK SELECTION")
     print("="*60)
     print(f"Level {level}: Select {num_packs} packs to open. Each pack gives you 1 random card!")
+    if player.packs_remaining > 0:
+        print(f"  (Base: {base_packs} packs + {player.packs_remaining} remaining from last time)")
     print(f"Current Bounty: {player.bounty} 💰")
     print(f"Reroll cost: 10 bounty per card")
     print()
@@ -2859,7 +2866,10 @@ def select_packs_interactive(player: Player) -> List[Card]:
 
                 # Allow early exit
                 if choice.lower() in ['q', 'quit', 'exit']:
+                    remaining = num_packs - pick_num + 1
+                    player.packs_remaining = remaining
                     print(f"\nExiting pack selection early. Selected {len(selected_cards)} cards.")
+                    print(f"Remaining packs saved: {remaining}")
                     return selected_cards
 
                 idx = int(choice) - 1
@@ -2936,6 +2946,9 @@ def select_packs_interactive(player: Player) -> List[Card]:
                     print(f"Invalid choice. Enter a number between 1 and {len(pack_names)}.")
             except ValueError:
                 print("Invalid input. Enter a number.")
+
+    # All packs opened - clear remaining counter
+    player.packs_remaining = 0
 
     print("\n" + "="*60)
     print(f"FINAL DECK ({len(selected_cards)} cards)")
@@ -3292,9 +3305,8 @@ def main():
             name = input(f"Enter name for Player {i+1}: ")
             players.append(Player(name))
 
-    # Main game loop - repeat prep and tower phases
-    continue_playing = True
-    while continue_playing:
+    # Main game loop - repeat prep and tower phases indefinitely
+    while True:
         # Phase 2: Each player does their prep in turns via menu
         print("\n" + "="*60)
         print("PREPARATION PHASE")
@@ -3422,7 +3434,7 @@ def main():
 
         # Prepare for next day - clear decks and increment day counter
         print("\n" + "="*60)
-        print("DAY COMPLETE")
+        print("DAY COMPLETE - Preparing for next day...")
         print("="*60)
         for player in players:
             # Clear deck for new day
@@ -3433,12 +3445,7 @@ def main():
             # Increment day counter
             player.day += 1
 
-        # Ask if players want to continue to next day
-        print("\nWould you like to continue to the next day?")
-        continue_choice = input("Continue playing? [y/n]: ").strip().lower()
-        if continue_choice != 'y':
-            continue_playing = False
-            print("\nThanks for playing!")
+        print("Starting Day " + str(players[0].day) + "...")
 
 
 if __name__ == "__main__":
