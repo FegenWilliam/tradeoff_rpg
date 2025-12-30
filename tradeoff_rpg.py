@@ -3162,7 +3162,7 @@ def bounty_shop_interactive(player: Player) -> List[Card]:
     return purchased_cards
 
 
-def prep_menu(player: Player) -> List[Card]:
+def prep_menu(player: Player, all_players: List['Player']) -> List[Card]:
     """
     Show preparation menu for a player.
     Returns list of all cards accumulated from shop and packs.
@@ -3183,10 +3183,11 @@ def prep_menu(player: Player) -> List[Card]:
         print(f"{'='*60}")
         print("  1. Visit Bounty Shop")
         print("  2. Select and Open Packs")
-        print("  3. Enter Tower (end preparation)")
+        print("  3. Save Game")
+        print("  4. Enter Tower (end preparation)")
         print(f"{'='*60}")
 
-        choice = input("\nEnter choice (1-3): ").strip()
+        choice = input("\nEnter choice (1-4): ").strip()
 
         if choice == '1':
             # Visit bounty shop
@@ -3199,11 +3200,16 @@ def prep_menu(player: Player) -> List[Card]:
             all_cards.extend(pack_cards)
 
         elif choice == '3':
+            # Save game
+            save_game(all_players, "save_game.json")
+            print("\n✓ Game saved successfully!")
+
+        elif choice == '4':
             # Enter tower - end prep for this player
             print(f"\n{player.name} is ready to enter the tower!")
             break
         else:
-            print("Invalid choice. Please enter 1, 2, or 3.")
+            print("Invalid choice. Please enter 1, 2, 3, or 4.")
 
     return all_cards
 
@@ -3280,7 +3286,7 @@ def main():
                 change_ascension_card_interactive(player)
 
         # Show prep menu - player can visit shop/packs multiple times
-        deck = prep_menu(player)
+        deck = prep_menu(player, players)
 
         # Equip the deck after player is done prepping
         player.equip_deck(deck)
