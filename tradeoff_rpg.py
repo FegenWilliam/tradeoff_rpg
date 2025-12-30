@@ -59,13 +59,15 @@ class Card:
                  luck_bonus: int = 0, special_effect: Optional[str] = None,
                  damage: int = 0, magic_damage: int = 0, mana_cost: int = 0,
                  weapon_type: Optional['WeaponType'] = None,
-                 accessory_type: Optional['AccessoryType'] = None):
+                 accessory_type: Optional['AccessoryType'] = None,
+                 spawn_condition: Optional[str] = None):
         self.name = name
         self.card_type = card_type
         self.card_class = card_class
         self.description = description
         self.weapon_type = weapon_type  # Type of weapon for dual wielding rules
         self.accessory_type = accessory_type  # Type of accessory for equip limits
+        self.spawn_condition = spawn_condition  # Condition that must be met for this card to spawn
 
         # Stat modifiers
         self.hp_bonus = hp_bonus
@@ -145,6 +147,14 @@ class Player:
         self.has_arcane_tome_wielder = False
         self.has_berserkers_rage = False
         self.has_barrier = False
+        self.has_unending_rage = False
+        self.has_barrier_permanence = False
+        self.has_dual_cast = False
+        self.has_quick_meteor = False
+        self.has_spellblade = False
+        self.has_impaler_weapon = False
+        self.has_arcane_battery = False
+        self.has_ogres_sword = False
 
         # Reactive Armor state
         self.reactive_armor_active = False  # True after taking damage, gives 50% reduction on next hit
@@ -168,6 +178,13 @@ class Player:
         self.meteor_channeling_turns = 0  # Turns remaining before Meteor launches (2 turns)
         self.meteor_damage = 0  # Damage to deal when Meteor launches
         self.dot_effects: List[dict] = []  # List of active DoT effects {name, damage, turns_remaining}
+
+        # Dual Cast state
+        self.equipped_spell_2: Optional[Card] = None  # Second spell for Dual Cast
+
+        # Arcane Battery state
+        self.battery_spell: Optional[Card] = None  # Extra spell slot for Arcane Battery
+        self.battery_turn_counter = 0  # Counts turns to trigger auto-cast
 
         # Battle statistics
         self.monsters_killed = 0
@@ -305,6 +322,14 @@ class Player:
         self.has_arcane_tome_wielder = any(c.special_effect == "arcane_tome_wielder" for c in self.active_cards)
         self.has_berserkers_rage = any(c.special_effect == "berserkers_rage" for c in self.active_cards)
         self.has_barrier = any(c.special_effect == "barrier" for c in self.active_cards)
+        self.has_unending_rage = any(c.special_effect == "unending_rage" for c in self.active_cards)
+        self.has_barrier_permanence = any(c.special_effect == "barrier_permanence" for c in self.active_cards)
+        self.has_dual_cast = any(c.special_effect == "dual_cast" for c in self.active_cards)
+        self.has_quick_meteor = any(c.special_effect == "quick_meteor" for c in self.active_cards)
+        self.has_spellblade = any(c.special_effect == "spellblade" for c in self.active_cards)
+        self.has_impaler_weapon = any(c.special_effect == "impaler_weapon" for c in self.active_cards)
+        self.has_arcane_battery = any(c.special_effect == "arcane_battery" for c in self.active_cards)
+        self.has_ogres_sword = any(c.special_effect == "ogres_sword" for c in self.active_cards)
 
         # Calculate base bonuses (excluding unique cards with special mechanics)
         total_hp_bonus = sum(card.hp_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
@@ -370,11 +395,21 @@ class Player:
             self.dodge_chance += 100.0
             self.crit_chance = 0.0
 
-        # Equip spell cards - only one spell can be equipped at a time
+        # Equip spell cards
         spell_cards = [card for card in self.active_cards if card.card_class == CardClass.SPELL]
         if spell_cards:
             # Equip the first spell card (priority order: as they appear in deck)
             self.equipped_spell = spell_cards[0]
+
+            # Dual Cast: Equip second spell if available
+            if self.has_dual_cast and len(spell_cards) >= 2:
+                self.equipped_spell_2 = spell_cards[1]
+
+            # Arcane Battery: Equip third spell in battery slot if available
+            if self.has_arcane_battery and len(spell_cards) >= 2:
+                battery_index = 2 if self.has_dual_cast and len(spell_cards) >= 3 else 1
+                if battery_index < len(spell_cards):
+                    self.battery_spell = spell_cards[battery_index]
 
         self.current_hp = min(self.current_hp, self.max_hp)
         self.current_mana = min(self.current_mana, self.max_mana)
@@ -461,6 +496,10 @@ class Player:
                 return True
         return False
 
+    def can_cast_spells(self) -> bool:
+        """Check if player can cast spells (has magic weapon or Spellblade)."""
+        return self.has_magic_weapon() or self.has_spellblade
+
     def can_dodge(self, silent: bool = False) -> bool:
         """Check if player can dodge (can't dodge twice in a row). Handles Lucky 7."""
         if self.dodged_last_attack:
@@ -546,8 +585,20 @@ class Player:
         self.current_mana = self.max_mana
         self.dodged_last_attack = False
         self.reactive_armor_active = False  # Reset Reactive Armor between floors
-        self.rage_stacks = 0  # Reset Berserker's Rage stacks between floors
-        self.shield = 0  # Reset Barrier shield between floors
+
+        # Unending Rage: Don't reset rage if player has this card
+        if not self.has_unending_rage:
+            self.rage_stacks = 0  # Reset Berserker's Rage stacks between floors
+
+        # Barrier Permanence: Don't reset shield if player has this card
+        # Also cap shield at 200% of max HP
+        if not self.has_barrier_permanence:
+            self.shield = 0  # Reset Barrier shield between floors
+        else:
+            # Cap shield at 200% max HP
+            max_shield = int(self.max_hp * 2.0)
+            self.shield = min(self.shield, max_shield)
+
         self.ancestral_rage_stacks = 0  # Reset Ancestral Rage stacks between floors
 
     def get_xp_for_next_level(self) -> int:
@@ -673,6 +724,7 @@ class Enemy:
         # Combat state
         self.dodged_last_attack = False
         self.impaled = False  # Impale status from Impaler ascension card
+        self.stunned = False  # Stun status from Ogre's Sword
 
     def _generate_name(self) -> str:
         """Generate enemy name based on floor and type."""
@@ -1096,12 +1148,29 @@ class Combat:
                     enemies.pop(0)
 
         elif spell_effect == "meteor":
-            # Start channeling for 2 turns
-            player.meteor_channeling = True
-            player.meteor_channeling_turns = 2
-            player.meteor_damage = base_damage
-            if not silent:
-                print(f"  🌠 Meteor: Channeling... (2 turns until impact)")
+            # Quick Meteor: Instant cast with reduced damage (2x instead of 5x)
+            if player.has_quick_meteor:
+                # Modify damage to 2x instead of 5x
+                quick_meteor_damage = int(player.magic_attack * 2.0)
+                if not silent:
+                    print(f"  🌠 Quick Meteor: Instant cast! (AOE)")
+                # Deal damage to all enemies
+                for enemy in enemies[:]:
+                    defeated, damage_dealt, is_crit = Combat._perform_attack(player, enemy, quick_meteor_damage, "magic", silent=silent)
+                    total_damage += damage_dealt
+                    if defeated:
+                        if not silent:
+                            print(f"  ✓ {enemy.name} defeated!")
+                        player.monsters_killed += 1
+                        player.gain_bounty(1, silent=silent)
+                        enemies.remove(enemy)
+            else:
+                # Normal Meteor: Start channeling for 2 turns
+                player.meteor_channeling = True
+                player.meteor_channeling_turns = 2
+                player.meteor_damage = base_damage
+                if not silent:
+                    print(f"  🌠 Meteor: Channeling... (2 turns until impact)")
 
         elif spell_effect == "incinerate":
             # Immediate damage + DoT for 3 turns
@@ -1218,9 +1287,19 @@ class Combat:
         """
         # Barrier: Initialize shield at battle start
         if player.has_barrier:
-            player.shield = int(player.magic_attack * 0.5)
-            if not silent and player.shield > 0:
-                print(f"  🛡️ Barrier activates! Shield: {player.shield}")
+            new_shield = int(player.magic_attack * 0.5)
+            # Barrier Permanence: Stack with existing shield
+            if player.has_barrier_permanence:
+                player.shield += new_shield
+                # Cap at 200% max HP
+                max_shield = int(player.max_hp * 2.0)
+                player.shield = min(player.shield, max_shield)
+                if not silent and player.shield > 0:
+                    print(f"  🛡️ Barrier activates! Shield: {player.shield} (capped at {max_shield})")
+            else:
+                player.shield = new_shield
+                if not silent and player.shield > 0:
+                    print(f"  🛡️ Barrier activates! Shield: {player.shield}")
 
         if not silent:
             print(f"\n{'='*60}")
@@ -1243,6 +1322,27 @@ class Combat:
             player.regenerate_mana()
             for enemy in enemies:
                 enemy.regenerate_mana()
+
+            # Arcane Battery: Auto-cast battery spell every 2 turns
+            if player.has_arcane_battery and player.battery_spell:
+                player.battery_turn_counter += 1
+                if player.battery_turn_counter >= 2:
+                    player.battery_turn_counter = 0
+                    # Check if spell can be cast (not channeling spells)
+                    if player.battery_spell.special_effect not in ["beam", "meteor"]:
+                        # Double mana cost for battery spell
+                        battery_mana_cost = player.battery_spell.mana_cost * 2
+                        if player.current_mana >= battery_mana_cost:
+                            if not silent:
+                                print(f"  🔋 Arcane Battery: Auto-casting {player.battery_spell.name}! (2x mana cost: {battery_mana_cost})")
+                            # Temporarily set the spell's mana cost to 2x
+                            original_cost = player.battery_spell.mana_cost
+                            player.battery_spell.mana_cost = battery_mana_cost
+                            Combat._cast_spell(player, player.battery_spell, enemies, silent=silent)
+                            player.battery_spell.mana_cost = original_cost
+                        else:
+                            if not silent:
+                                print(f"  🔋 Arcane Battery: Not enough mana to auto-cast {player.battery_spell.name}! ({player.current_mana}/{battery_mana_cost})")
 
             # Process channeling spells and DoTs at start of player turn
             Combat._process_channeling_and_dots(player, enemies, silent=silent)
@@ -1292,7 +1392,7 @@ class Combat:
                         spell_to_cast = None
                         if player.equipped_spell:
                             spell_to_cast = player.equipped_spell
-                        elif player.has_magic_weapon() and player.magic_attack > 0:
+                        elif player.can_cast_spells() and player.magic_attack > 0:
                             # Create temporary Bolt spell as fallback
                             spell_to_cast = Card("Bolt", CardType.ACTIVE, CardClass.SPELL,
                                                 "Fallback spell. Cost: 5 mana, Damage: 0.7x magic attack",
@@ -1304,6 +1404,14 @@ class Combat:
                             damage_dealt, _ = Combat._cast_spell(player, spell_to_cast, enemies, silent=silent)
                             attack_type = "magic"
                             defeated = (len(enemies) == 0 or (enemies and enemies[0].current_hp <= 0))
+
+                            # Dual Cast: Cast second spell if equipped
+                            if player.has_dual_cast and player.equipped_spell_2 and not defeated:
+                                if not silent:
+                                    print(f"  🔮 Dual Cast: Casting {player.equipped_spell_2.name}!")
+                                damage_dealt_2, _ = Combat._cast_spell(player, player.equipped_spell_2, enemies, silent=silent)
+                                damage_dealt += damage_dealt_2
+                                defeated = (len(enemies) == 0 or (enemies and enemies[0].current_hp <= 0))
                         # Mana Amplifier: Special attack mechanic (only if no spell)
                         elif player.has_mana_amplifier:
                             mana_cost = int(player.max_mana * 0.5)
@@ -1395,6 +1503,30 @@ class Combat:
                                 if not silent:
                                     print(f"  🗡️ Impale applied! Next hit will deal +70% damage")
 
+                            # Impaler Weapon: Apply impale on ALL hits (not just crits)
+                            if player.has_impaler_weapon and not defeated:
+                                target.impaled = True
+                                if not silent:
+                                    print(f"  🗡️ Impaler weapon: Impale applied! Next hit will deal +70% damage")
+
+                            # Ogre's Sword: 10% chance to stun
+                            if player.has_ogres_sword and not defeated:
+                                if random.random() < 0.10:
+                                    target.stunned = True
+                                    if not silent:
+                                        print(f"  💫 Ogre's Sword: {target.name} is STUNNED! Will skip next turn")
+
+                            # Spellblade: Add 50% of physical damage as magic damage
+                            if player.has_spellblade and attack_type == "physical" and damage_dealt > 0 and not defeated:
+                                spellblade_damage = int(damage_dealt * 0.5)
+                                actual_spell_damage = max(1, spellblade_damage - target.defense)
+                                target.current_hp -= actual_spell_damage
+                                player.total_damage_dealt += actual_spell_damage
+                                if not silent:
+                                    print(f"  ⚡ Spellblade: Bonus {actual_spell_damage} magic damage!")
+                                if target.current_hp <= 0:
+                                    defeated = True
+
                 # Berserker's Rage: Gain rage on successful physical hit
                 if player.has_berserkers_rage and attack_type == "physical" and damage_dealt > 0:
                     if player.rage_stacks < 50:
@@ -1424,6 +1556,13 @@ class Combat:
 
             # Enemies turn
             for enemy in enemies[:]:  # Copy list since we might remove enemies
+                # Check if enemy is stunned (skip turn)
+                if enemy.stunned:
+                    if not silent:
+                        print(f"  💫 {enemy.name} is stunned and skips their turn!")
+                    enemy.stunned = False  # Clear stun after skipping turn
+                    continue
+
                 # Each enemy gets attacks based on their attack speed
                 num_attacks = int(enemy.attack_speed)
                 has_partial_attack = (enemy.attack_speed % 1) > 0
@@ -2111,6 +2250,82 @@ def create_unique_card_pool() -> List[Card]:
         special_effect="barrier"
     ))
 
+    # 10. Unending Rage (Offense Pack)
+    # Rage does not decay between floors
+    cards.append(Card(
+        "Unending Rage", CardType.PASSIVE, CardClass.UNIQUE,
+        "Rage does not decay between floors",
+        special_effect="unending_rage",
+        spawn_condition="has_rage_generation"
+    ))
+
+    # 11. Barrier Permanence (Defense Pack)
+    # Barrier is kept between floors, stacks up to 200% of max HP
+    cards.append(Card(
+        "Barrier Permanence", CardType.PASSIVE, CardClass.UNIQUE,
+        "Barrier is kept between floors. Barrier stacks up to 200% of max HP",
+        special_effect="barrier_permanence",
+        spawn_condition="has_barrier_generation"
+    ))
+
+    # 12. Dual Cast (Magic Pack)
+    # Can equip 2 spells at once, both cast together
+    cards.append(Card(
+        "Dual Cast", CardType.PASSIVE, CardClass.UNIQUE,
+        "Can equip 2 spells at once. Both cast together",
+        special_effect="dual_cast"
+    ))
+
+    # 13. Quick Meteor (Magic Pack)
+    # Meteor deals 2x damage but has no channeling
+    cards.append(Card(
+        "Quick Meteor", CardType.PASSIVE, CardClass.UNIQUE,
+        "Meteor now deals only 2x damage but has no channeling needed",
+        special_effect="quick_meteor",
+        spawn_condition="has_meteor_spell"
+    ))
+
+    # 14. Spellblade (Magic Pack)
+    # Gain 50% of physical damage as magic damage, can use spells without magic weapon
+    cards.append(Card(
+        "Spellblade", CardType.PASSIVE, CardClass.UNIQUE,
+        "Gain 50% of physical damage as magic damage. Can use spells without a magic weapon",
+        special_effect="spellblade"
+    ))
+
+    # 15. Impaler (Dagger) - Unique Weapon
+    # All hits impale the target, 30 ATK, 1.4 Speed
+    cards.append(Card(
+        "Impaler", CardType.WEAPON, CardClass.UNIQUE,
+        "All hits impale the target. Impale: +70% damage on next hit. ATK: 30, Speed: 1.4",
+        attack_bonus=30,
+        weapon_type=WeaponType.DAGGER,
+        attack_speed_bonus=1.4,
+        special_effect="impaler_weapon"
+    ))
+
+    # 16. Arcane Battery - Unique Weapon
+    # Can hold an extra spell, auto-cast every 2 turns at 2x mana cost
+    cards.append(Card(
+        "Arcane Battery", CardType.WEAPON, CardClass.UNIQUE,
+        "Can hold an extra spell, auto-cast every 2 turns at 2x mana. Cannot channel. MAG: 70, Speed: 1.0",
+        magic_attack_bonus=70,
+        weapon_type=WeaponType.STAFF,
+        attack_speed_bonus=1.0,
+        special_effect="arcane_battery"
+    ))
+
+    # 17. Ogre's Sword - Unique Weapon
+    # 10% chance to stun on hit, stunned enemies skip turn
+    cards.append(Card(
+        "Ogre's Sword", CardType.WEAPON, CardClass.UNIQUE,
+        "Hits have 10% chance to stun target. Stunned enemies skip their turn. ATK: 200, Speed: 0.5",
+        attack_bonus=200,
+        weapon_type=WeaponType.GREATSWORD,
+        attack_speed_bonus=0.5,
+        special_effect="ogres_sword"
+    ))
+
     return cards
 
 
@@ -2138,20 +2353,28 @@ def create_card_packs() -> dict:
         "arcane_tome_wielder": next(c for c in unique_pool if c.special_effect == "arcane_tome_wielder"),
         "berserkers_rage": next(c for c in unique_pool if c.special_effect == "berserkers_rage"),
         "barrier": next(c for c in unique_pool if c.special_effect == "barrier"),
+        "unending_rage": next(c for c in unique_pool if c.special_effect == "unending_rage"),
+        "barrier_permanence": next(c for c in unique_pool if c.special_effect == "barrier_permanence"),
+        "dual_cast": next(c for c in unique_pool if c.special_effect == "dual_cast"),
+        "quick_meteor": next(c for c in unique_pool if c.special_effect == "quick_meteor"),
+        "spellblade": next(c for c in unique_pool if c.special_effect == "spellblade"),
+        "impaler_weapon": next(c for c in unique_pool if c.special_effect == "impaler_weapon"),
+        "arcane_battery": next(c for c in unique_pool if c.special_effect == "arcane_battery"),
+        "ogres_sword": next(c for c in unique_pool if c.special_effect == "ogres_sword"),
     }
 
-    # Physical Weapons Pack - all physical weapons + Titan's Strength (unique)
+    # Physical Weapons Pack - all physical weapons + Titan's Strength, Impaler, Ogre's Sword (unique)
     packs["Physical Weapons"] = {
         "common": [card for card in equipment_pool
                    if card.card_type == CardType.WEAPON and card.attack_bonus > 0],
-        "unique": [unique_cards["titans_strength"]]
+        "unique": [unique_cards["titans_strength"], unique_cards["impaler_weapon"], unique_cards["ogres_sword"]]
     }
 
-    # Magic Weapons Pack - all magic weapons + Arcane Tome Wielder (unique)
+    # Magic Weapons Pack - all magic weapons + Arcane Tome Wielder, Arcane Battery (unique)
     packs["Magic Weapons"] = {
         "common": [card for card in equipment_pool
                    if card.card_type == CardType.WEAPON and card.magic_attack_bonus > 0],
-        "unique": [unique_cards["arcane_tome_wielder"]]
+        "unique": [unique_cards["arcane_tome_wielder"], unique_cards["arcane_battery"]]
     }
 
     # Armor Pack - all armor (no unique)
@@ -2160,18 +2383,18 @@ def create_card_packs() -> dict:
         "unique": []
     }
 
-    # Offense Pack - Strength, Power, Fury, Assassin, Pinpoint, Fatal Hits (all levels) + Berserker's Rage (unique)
+    # Offense Pack - Strength, Power, Fury, Assassin, Pinpoint, Fatal Hits (all levels) + Berserker's Rage, Unending Rage (unique)
     packs["Offense"] = {
         "common": [card for card in stat_pool
                    if any(card.name.startswith(prefix) for prefix in ["Strength", "Power", "Fury", "Assassin", "Pinpoint", "Fatal Hits"])],
-        "unique": [unique_cards["berserkers_rage"]]
+        "unique": [unique_cards["berserkers_rage"], unique_cards["unending_rage"]]
     }
 
-    # Defense Pack - Toughness, Endurance, Guardian, Tank (all levels) + Reactive Armor + Barrier (unique)
+    # Defense Pack - Toughness, Endurance, Guardian, Tank (all levels) + Reactive Armor, Barrier, Barrier Permanence (unique)
     packs["Defense"] = {
         "common": [card for card in stat_pool
                    if any(card.name.startswith(prefix) for prefix in ["Toughness", "Endurance", "Guardian", "Tank"])],
-        "unique": [unique_cards["reactive_armor"], unique_cards["barrier"]]
+        "unique": [unique_cards["reactive_armor"], unique_cards["barrier"], unique_cards["barrier_permanence"]]
     }
 
     # Speed Pack - Swiftness, Reflex, Agility, Reckless (all levels) + Unparalleled Swiftness (unique)
@@ -2181,11 +2404,11 @@ def create_card_packs() -> dict:
         "unique": [unique_cards["unparalleled_swiftness"]]
     }
 
-    # Magic Pack - Intellect, Wisdom, Meditation, Spirit, Arcane, Capacitor (all levels) + Mana Amplifier + Mana Conduit (unique)
+    # Magic Pack - Intellect, Wisdom, Meditation, Spirit, Arcane, Capacitor (all levels) + Mana Amplifier, Mana Conduit, Dual Cast, Quick Meteor, Spellblade (unique)
     packs["Magic"] = {
         "common": [card for card in stat_pool
                    if any(card.name.startswith(prefix) for prefix in ["Intellect", "Wisdom", "Meditation", "Spirit", "Arcane", "Capacitor"])],
-        "unique": [unique_cards["mana_amplifier"], unique_cards["mana_conduit"]]
+        "unique": [unique_cards["mana_amplifier"], unique_cards["mana_conduit"], unique_cards["dual_cast"], unique_cards["quick_meteor"], unique_cards["spellblade"]]
     }
 
     # Utility Pack - Vitality, Precision, Fortune, Focus, Warrior (all levels) + Lucky 7 (unique)
@@ -2215,13 +2438,44 @@ def create_card_packs() -> dict:
     return packs
 
 
-def open_pack(pack_data: dict) -> Card:
+def check_spawn_condition(card: Card, player: 'Player') -> bool:
+    """
+    Check if a card's spawn condition is met for the given player.
+
+    Args:
+        card: The card to check
+        player: The player to check against
+
+    Returns:
+        True if the card can spawn (no condition or condition is met), False otherwise
+    """
+    if not card.spawn_condition:
+        return True
+
+    if card.spawn_condition == "has_rage_generation":
+        # Check if player has any cards that generate rage (Berserker's Rage or Ancestral Rage ascension)
+        return any(c.special_effect == "berserkers_rage" for c in player.active_cards) or player.has_ancestral_rage
+
+    if card.spawn_condition == "has_barrier_generation":
+        # Check if player has any cards that generate barrier/shield
+        return any(c.special_effect == "barrier" for c in player.active_cards)
+
+    if card.spawn_condition == "has_meteor_spell":
+        # Check if player has the Meteor spell
+        return any(c.special_effect == "meteor" for c in player.active_cards)
+
+    # Unknown condition defaults to True
+    return True
+
+
+def open_pack(pack_data: dict, player: Optional['Player'] = None) -> Card:
     """
     Open a pack and get 1 random card from it.
     Unique cards have a 5% drop rate.
 
     Args:
         pack_data: Dictionary with 'common' and 'unique' card lists
+        player: Optional player to check spawn conditions against
 
     Returns:
         A random card from the pack
@@ -2229,7 +2483,11 @@ def open_pack(pack_data: dict) -> Card:
     common_cards = pack_data["common"]
     unique_cards = pack_data["unique"]
 
-    # 5% chance to get a unique card (if any exist in this pack)
+    # Filter unique cards based on spawn conditions
+    if player:
+        unique_cards = [card for card in unique_cards if check_spawn_condition(card, player)]
+
+    # 5% chance to get a unique card (if any exist in this pack and pass spawn conditions)
     if unique_cards and random.random() < 0.05:
         return random.choice(unique_cards)
 
@@ -2358,7 +2616,7 @@ def select_packs_interactive(player: Player) -> List[Card]:
 
                 if 0 <= idx < len(pack_names):
                     pack_name = pack_names[idx]
-                    card = open_pack(packs[pack_name])
+                    card = open_pack(packs[pack_name], player)
 
                     # Show the card drawn
                     unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
@@ -2370,7 +2628,7 @@ def select_packs_interactive(player: Player) -> List[Card]:
                         reroll_choice = input(f"Reroll this card? (10 bounty, current: {player.bounty}) [y/n]: ").strip().lower()
                         if reroll_choice == 'y':
                             player.bounty -= 10
-                            card = open_pack(packs[pack_name])
+                            card = open_pack(packs[pack_name], player)
                             unique_marker = " ✨ UNIQUE!" if card.card_class == CardClass.UNIQUE else ""
                             print(f"🔄 Rerolled! Got: {card.name}{unique_marker}")
                             print(f"   {card.description}")
