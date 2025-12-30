@@ -3019,6 +3019,52 @@ def bounty_shop_interactive(player: Player) -> List[Card]:
     return purchased_cards
 
 
+def prep_menu(player: Player) -> List[Card]:
+    """
+    Show preparation menu for a player.
+    Returns list of all cards accumulated from shop and packs.
+    Player can visit shop/open packs multiple times before entering tower.
+    """
+    all_cards = []
+
+    while True:
+        print(f"\n{'='*60}")
+        print(f"{player.name.upper()}'S PREPARATION MENU")
+        print(f"{'='*60}")
+        print(f"Level: {player.level}")
+        print(f"Bounty: {player.bounty} 💰")
+        print(f"Highest Floor: {player.highest_floor}")
+        print(f"Cards collected this session: {len(all_cards)}")
+        print(f"\n{'='*60}")
+        print("What would you like to do?")
+        print(f"{'='*60}")
+        print("  1. Visit Bounty Shop")
+        print("  2. Select and Open Packs")
+        print("  3. Enter Tower (end preparation)")
+        print(f"{'='*60}")
+
+        choice = input("\nEnter choice (1-3): ").strip()
+
+        if choice == '1':
+            # Visit bounty shop
+            shop_cards = bounty_shop_interactive(player)
+            all_cards.extend(shop_cards)
+
+        elif choice == '2':
+            # Select and open packs
+            pack_cards = select_packs_interactive(player)
+            all_cards.extend(pack_cards)
+
+        elif choice == '3':
+            # Enter tower - end prep for this player
+            print(f"\n{player.name} is ready to enter the tower!")
+            break
+        else:
+            print("Invalid choice. Please enter 1, 2, or 3.")
+
+    return all_cards
+
+
 def main():
     """Main game loop."""
     print("="*60)
@@ -3058,13 +3104,16 @@ def main():
             name = input(f"Enter name for Player {i+1}: ")
             players.append(Player(name))
 
-    # Phase 2: Each player does their prep in turns
+    # Phase 2: Each player does their prep in turns via menu
     print("\n" + "="*60)
     print("PREPARATION PHASE")
     print("="*60)
+    print("Each player will take turns preparing for the tower.")
+    print("When you're ready to enter, choose 'Enter Tower' to pass to the next player.")
+
     for i, player in enumerate(players, 1):
         print(f"\n{'='*60}")
-        print(f"PLAYER {i}: {player.name.upper()}'S TURN")
+        print(f"PLAYER {i}/{len(players)}: {player.name.upper()}'S TURN")
         print(f"{'='*60}")
 
         # Check for ascension card unlocks based on level
@@ -3087,20 +3136,16 @@ def main():
             if change_choice == 'y':
                 change_ascension_card_interactive(player)
 
-        # Visit bounty shop
-        shop_cards = bounty_shop_interactive(player)
+        # Show prep menu - player can visit shop/packs multiple times
+        deck = prep_menu(player)
 
-        # Select and open packs to build deck (based on player level)
-        pack_cards = select_packs_interactive(player)
-
-        # Combine shop cards and pack cards for the deck
-        deck = shop_cards + pack_cards
-
+        # Equip the deck after player is done prepping
         player.equip_deck(deck)
 
     print("\n" + "="*60)
-    print("PREP PHASE COMPLETE")
+    print("ALL PLAYERS READY")
     print("="*60)
+    print("All players have completed their preparation!")
 
     # Save option before entering tower
     save_choice = input("\nSave game before entering tower? [y/n]: ").strip().lower()
