@@ -3222,7 +3222,11 @@ def prep_menu(player: Player, all_players: List['Player']) -> List[Card]:
 
         elif choice == '3':
             # Save game
+            # Temporarily update the deck with collected cards before saving
+            old_deck = player.deck.copy() if player.deck else []
+            player.deck = all_cards
             save_game(all_players, "save_game.json")
+            player.deck = old_deck  # Restore old deck (will be properly equipped later)
             print("\n✓ Game saved successfully!")
 
         elif choice == '4':
