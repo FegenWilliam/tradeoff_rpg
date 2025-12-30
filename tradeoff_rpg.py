@@ -204,6 +204,9 @@ class Player:
         # Currency system
         self.bounty = 0  # Gained per monster kill, persists across runs
 
+        # Day tracking
+        self.day = 1  # Tracks how many tower runs (days) have been completed
+
         # Ascension Cards (unlocked at level 10 and 20)
         self.ascension_slots = []  # List of equipped ascension card names
         self.has_ancestral_rage = False
@@ -755,6 +758,7 @@ def save_game(players: List[Player], filename: str = "save_game.json"):
             'current_xp': player.current_xp,
             'highest_floor': player.highest_floor,
             'bounty': player.bounty,
+            'day': player.day,
             'ascension_slots': player.ascension_slots,
             'deck': [card_to_dict(card) for card in player.deck]
         }
@@ -781,6 +785,7 @@ def load_game(filename: str = "save_game.json") -> Optional[List[Player]]:
             player.current_xp = player_data['current_xp']
             player.highest_floor = player_data['highest_floor']
             player.bounty = player_data['bounty']
+            player.day = player_data.get('day', 1)  # Default to 1 for backwards compatibility
             player.ascension_slots = player_data['ascension_slots']
             player.deck = [dict_to_card(card_dict) for card_dict in player_data['deck']]
             players.append(player)
@@ -2841,6 +2846,7 @@ def select_packs_interactive(player: Player) -> List[Card]:
 
     print("\nTIP: You can pick the same pack multiple times!")
     print("NOTE: Weapon restrictions apply - some weapons can't be equipped together!")
+    print("Type 'q' or 'exit' to finish pack selection early.")
     print()
 
     pick_num = 1
@@ -2849,7 +2855,13 @@ def select_packs_interactive(player: Player) -> List[Card]:
 
         while True:
             try:
-                choice = input(f"Select pack (1-{len(pack_names)}): ").strip()
+                choice = input(f"Select pack (1-{len(pack_names)}) or 'q' to exit: ").strip()
+
+                # Allow early exit
+                if choice.lower() in ['q', 'quit', 'exit']:
+                    print(f"\nExiting pack selection early. Selected {len(selected_cards)} cards.")
+                    return selected_cards
+
                 idx = int(choice) - 1
 
                 if 0 <= idx < len(pack_names):
@@ -3195,7 +3207,7 @@ def prep_menu(player: Player, all_players: List['Player']) -> List[Card]:
 
     while True:
         print(f"\n{'='*60}")
-        print(f"{player.name.upper()}'S PREPARATION MENU")
+        print(f"{player.name.upper()}'S PREPARATION MENU - DAY {player.day}")
         print(f"{'='*60}")
         print(f"Level: {player.level}")
         print(f"Bounty: {player.bounty} 💰")
@@ -3280,130 +3292,153 @@ def main():
             name = input(f"Enter name for Player {i+1}: ")
             players.append(Player(name))
 
-    # Phase 2: Each player does their prep in turns via menu
-    print("\n" + "="*60)
-    print("PREPARATION PHASE")
-    print("="*60)
-    print("Each player will take turns preparing for the tower.")
-    print("When you're ready to enter, choose 'Enter Tower' to pass to the next player.")
+    # Main game loop - repeat prep and tower phases
+    continue_playing = True
+    while continue_playing:
+        # Phase 2: Each player does their prep in turns via menu
+        print("\n" + "="*60)
+        print("PREPARATION PHASE")
+        print("="*60)
+        print("Each player will take turns preparing for the tower.")
+        print("When you're ready to enter, choose 'Enter Tower' to pass to the next player.")
 
-    for i, player in enumerate(players, 1):
-        print(f"\n{'='*60}")
-        print(f"PLAYER {i}/{len(players)}: {player.name.upper()}'S TURN")
-        print(f"{'='*60}")
+        for i, player in enumerate(players, 1):
+            print(f"\n{'='*60}")
+            print(f"PLAYER {i}/{len(players)}: {player.name.upper()}'S TURN")
+            print(f"{'='*60}")
 
-        # Check for ascension card unlocks based on level
-        num_slots_needed = 0
-        if player.level >= 20:
-            num_slots_needed = 2
-        elif player.level >= 10:
-            num_slots_needed = 1
+            # Check for ascension card unlocks based on level
+            num_slots_needed = 0
+            if player.level >= 20:
+                num_slots_needed = 2
+            elif player.level >= 10:
+                num_slots_needed = 1
 
-        # Select ascension cards if player has unlocked slots but hasn't selected them
-        if num_slots_needed > len(player.ascension_slots):
-            for slot in range(len(player.ascension_slots) + 1, num_slots_needed + 1):
-                print(f"\n🌟 You've unlocked Ascension Card Slot {slot}!")
-                selected_card = select_ascension_card_interactive(player, slot)
-                player.ascension_slots.append(selected_card)
+            # Select ascension cards if player has unlocked slots but hasn't selected them
+            if num_slots_needed > len(player.ascension_slots):
+                for slot in range(len(player.ascension_slots) + 1, num_slots_needed + 1):
+                    print(f"\n🌟 You've unlocked Ascension Card Slot {slot}!")
+                    selected_card = select_ascension_card_interactive(player, slot)
+                    player.ascension_slots.append(selected_card)
 
-        # Offer to change ascension cards if player has any and enough bounty
-        if len(player.ascension_slots) > 0 and player.bounty >= 100:
-            change_choice = input("\nDo you want to change your ascension cards? (100 bounty each) [y/n]: ").strip().lower()
-            if change_choice == 'y':
-                change_ascension_card_interactive(player)
+            # Offer to change ascension cards if player has any and enough bounty
+            if len(player.ascension_slots) > 0 and player.bounty >= 100:
+                change_choice = input("\nDo you want to change your ascension cards? (100 bounty each) [y/n]: ").strip().lower()
+                if change_choice == 'y':
+                    change_ascension_card_interactive(player)
 
-        # Show prep menu - player can visit shop/packs multiple times
-        deck = prep_menu(player, players)
+            # Show prep menu - player can visit shop/packs multiple times
+            deck = prep_menu(player, players)
 
-        # Equip the deck after player is done prepping
-        player.equip_deck(deck)
+            # Equip the deck after player is done prepping
+            player.equip_deck(deck)
 
-    print("\n" + "="*60)
-    print("ALL PLAYERS READY")
-    print("="*60)
-    print("All players have completed their preparation!")
+        print("\n" + "="*60)
+        print("ALL PLAYERS READY")
+        print("="*60)
+        print("All players have completed their preparation!")
 
-    # Save option before entering tower
-    save_choice = input("\nSave game before entering tower? [y/n]: ").strip().lower()
-    if save_choice == 'y':
-        save_game(players, "save_game.json")
+        # Save option before entering tower
+        save_choice = input("\nSave game before entering tower? [y/n]: ").strip().lower()
+        if save_choice == 'y':
+            save_game(players, "save_game.json")
 
-    print("\n" + "="*60)
-    print("ENTERING AUTO-BATTLE MODE")
-    print("="*60)
-    print("\nAll players will now automatically enter the tower.")
-    print("Battles will be simulated and results reported at the end.")
-    print("\nSimulating battles...")
-    print()
+        print("\n" + "="*60)
+        print("ENTERING AUTO-BATTLE MODE")
+        print("="*60)
+        print("\nAll players will now automatically enter the tower.")
+        print("Battles will be simulated and results reported at the end.")
+        print("\nSimulating battles...")
+        print()
 
-    # Tower climbing - AUTO-BATTLE MODE
-    tower = Tower()
-    active_players = players.copy()
+        # Tower climbing - AUTO-BATTLE MODE
+        tower = Tower()
+        active_players = players.copy()
 
-    while active_players:
-        floor = active_players[0].current_floor + 1
+        while active_players:
+            floor = active_players[0].current_floor + 1
 
-        # Show progress every 10 floors
-        if floor % 10 == 0 or floor == 1:
-            player_status = ", ".join([f"{p.name} (Floor {p.current_floor})" for p in active_players])
-            print(f"  Floor {floor}: {player_status}")
+            # Show progress every 10 floors
+            if floor % 10 == 0 or floor == 1:
+                player_status = ", ".join([f"{p.name} (Floor {p.current_floor})" for p in active_players])
+                print(f"  Floor {floor}: {player_status}")
 
-        # Each active player attempts this floor
-        for player in active_players[:]:  # Copy list to modify during iteration
-            player.current_floor = floor
+            # Each active player attempts this floor
+            for player in active_players[:]:  # Copy list to modify during iteration
+                player.current_floor = floor
 
-            # Generate enemies for this floor
-            enemies = tower.generate_enemies(floor)
+                # Generate enemies for this floor
+                enemies = tower.generate_enemies(floor)
 
-            # Battle - SILENT MODE
-            won = Combat.battle(player, enemies, silent=True)
+                # Battle - SILENT MODE
+                won = Combat.battle(player, enemies, silent=True)
 
-            if won:
-                # Player beat the floor
-                # Gain XP and potentially level up
-                leveled_up = player.gain_xp(floor, silent=True)
+                if won:
+                    # Player beat the floor
+                    # Gain XP and potentially level up
+                    leveled_up = player.gain_xp(floor, silent=True)
 
-                # Show level up notification
-                if leveled_up:
-                    print(f"  ⚡ {player.name} leveled up to {player.level}! (Next run: {player.get_max_packs()} packs)")
+                    # Show level up notification
+                    if leveled_up:
+                        print(f"  ⚡ {player.name} leveled up to {player.level}! (Next run: {player.get_max_packs()} packs)")
 
-                player.reset_for_floor()  # Heal for next floor
-            else:
-                # Player escaped
-                # Update highest floor if this is a new record
-                if player.current_floor > player.highest_floor:
-                    old_highest = player.highest_floor
-                    player.highest_floor = player.current_floor
-                    bonus_increase = player.highest_floor // 50 - old_highest // 50
-                    if bonus_increase > 0:
-                        print(f"  🏆 New record! Floor {player.highest_floor} (+{bonus_increase} bonus pack(s) next run)")
+                    player.reset_for_floor()  # Heal for next floor
+                else:
+                    # Player escaped
+                    # Update highest floor if this is a new record
+                    if player.current_floor > player.highest_floor:
+                        old_highest = player.highest_floor
+                        player.highest_floor = player.current_floor
+                        bonus_increase = player.highest_floor // 50 - old_highest // 50
+                        if bonus_increase > 0:
+                            print(f"  🏆 New record! Floor {player.highest_floor} (+{bonus_increase} bonus pack(s) next run)")
 
-                active_players.remove(player)
-                print(f"  ⚠️  {player.name} escaped at floor {player.current_floor}!")
+                    active_players.remove(player)
+                    print(f"  ⚠️  {player.name} escaped at floor {player.current_floor}!")
 
-        # Check if we've reached the top or all players are out
-        if not active_players:
-            break
+            # Check if we've reached the top or all players are out
+            if not active_players:
+                break
 
-        if floor >= Tower.MAX_FLOORS:
-            print("\n  🎉 TOP OF THE TOWER REACHED!")
-            break
+            if floor >= Tower.MAX_FLOORS:
+                print("\n  🎉 TOP OF THE TOWER REACHED!")
+                break
 
-    # Update highest floor for all players before final report
-    for player in players:
-        if player.current_floor > player.highest_floor:
-            player.highest_floor = player.current_floor
+        # Update highest floor for all players before final report
+        for player in players:
+            if player.current_floor > player.highest_floor:
+                player.highest_floor = player.current_floor
 
-    # Final results - BATTLE REPORT
-    print_battle_report(players)
+        # Final results - BATTLE REPORT
+        print_battle_report(players)
 
-    # Save game option
-    print("\n" + "="*60)
-    print("SAVE GAME")
-    print("="*60)
-    save_choice = input("\nSave game progress? [y/n]: ").strip().lower()
-    if save_choice == 'y':
-        save_game(players, "save_game.json")
+        # Save game option
+        print("\n" + "="*60)
+        print("SAVE GAME")
+        print("="*60)
+        save_choice = input("\nSave game progress? [y/n]: ").strip().lower()
+        if save_choice == 'y':
+            save_game(players, "save_game.json")
+
+        # Prepare for next day - clear decks and increment day counter
+        print("\n" + "="*60)
+        print("DAY COMPLETE")
+        print("="*60)
+        for player in players:
+            # Clear deck for new day
+            player.deck = []
+            player.active_cards = []
+            # Reset floor counter
+            player.current_floor = 0
+            # Increment day counter
+            player.day += 1
+
+        # Ask if players want to continue to next day
+        print("\nWould you like to continue to the next day?")
+        continue_choice = input("Continue playing? [y/n]: ").strip().lower()
+        if continue_choice != 'y':
+            continue_playing = False
+            print("\nThanks for playing!")
 
 
 if __name__ == "__main__":
