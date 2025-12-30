@@ -1497,7 +1497,7 @@ class Combat:
                             spell_to_cast = player.equipped_spell
                         elif player.can_cast_spells() and player.magic_attack > 0:
                             # Create temporary Bolt spell as fallback
-                            spell_to_cast = Card("Bolt", CardType.ACTIVE, CardClass.SPELL,
+                            spell_to_cast = Card("Bolt", CardType.SPELL, CardClass.SPELL,
                                                 "Fallback spell. Cost: 5 mana, Damage: 0.7x magic attack",
                                                 mana_cost=5, special_effect="bolt")
 
@@ -2117,7 +2117,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 1. Bolt - Fallback spell (always available with magic weapon)
     cards.append(Card(
-        "Bolt", CardType.ACTIVE, CardClass.SPELL,
+        "Bolt", CardType.SPELL, CardClass.SPELL,
         "Fallback spell. Cost: 5 mana, Damage: 0.7x magic attack",
         mana_cost=5,
         magic_damage=0,  # Will be calculated as 0.7x magic_attack
@@ -2126,7 +2126,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 2. Fireball - Basic spell
     cards.append(Card(
-        "Fireball", CardType.ACTIVE, CardClass.SPELL,
+        "Fireball", CardType.SPELL, CardClass.SPELL,
         "Basic fire spell. Cost: 10 mana, Damage: 1x magic attack",
         mana_cost=10,
         magic_damage=0,  # Will be calculated as 1x magic_attack
@@ -2136,7 +2136,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 3. Rapid Bolts - Multi-hit spell
     cards.append(Card(
-        "Rapid Bolts", CardType.ACTIVE, CardClass.SPELL,
+        "Rapid Bolts", CardType.SPELL, CardClass.SPELL,
         "Fires 3 rapid bolts. Cost: 20 mana total (8 per bolt), Damage: 0.8x per bolt, 1.5x attack speed",
         mana_cost=20,
         magic_damage=0,  # Will be calculated as 0.8x magic_attack per bolt
@@ -2146,7 +2146,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 4. Beam - Continuous cast spell
     cards.append(Card(
-        "Beam", CardType.ACTIVE, CardClass.SPELL,
+        "Beam", CardType.SPELL, CardClass.SPELL,
         "Continuous beam for 3 turns. Cost: 30 mana (upfront), Damage: 2x magic attack per turn, locks you in place",
         mana_cost=30,
         magic_damage=0,  # Will be calculated as 2x magic_attack per turn
@@ -2156,7 +2156,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 5. Meteor - Channeled AOE spell
     cards.append(Card(
-        "Meteor", CardType.ACTIVE, CardClass.SPELL,
+        "Meteor", CardType.SPELL, CardClass.SPELL,
         "Summons a meteor after 2 turns of channeling. Cost: 50 mana, Damage: 5x magic attack (AOE), 0.5x attack speed",
         mana_cost=50,
         magic_damage=0,  # Will be calculated as 5x magic_attack
@@ -2166,7 +2166,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 6. Incinerate - Damage over time spell
     cards.append(Card(
-        "Incinerate", CardType.ACTIVE, CardClass.SPELL,
+        "Incinerate", CardType.SPELL, CardClass.SPELL,
         "Burns enemy over time. Cost: 20 mana, Damage: 1.2x magic attack on cast + at start of next 3 turns",
         mana_cost=20,
         magic_damage=0,  # Will be calculated as 1.2x magic_attack
@@ -2176,7 +2176,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 7. Lightning Strike - Quick burst spell
     cards.append(Card(
-        "Lightning Strike", CardType.ACTIVE, CardClass.SPELL,
+        "Lightning Strike", CardType.SPELL, CardClass.SPELL,
         "Fast lightning strike. Cost: 15 mana, Damage: 1.3x magic attack, 1.4x attack speed",
         mana_cost=15,
         magic_damage=0,  # Will be calculated as 1.3x magic_attack
@@ -2186,7 +2186,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 8. Ice Shard - Medium damage spell
     cards.append(Card(
-        "Ice Shard", CardType.ACTIVE, CardClass.SPELL,
+        "Ice Shard", CardType.SPELL, CardClass.SPELL,
         "Sharp ice projectile. Cost: 12 mana, Damage: 1.1x magic attack, 1.1x attack speed",
         mana_cost=12,
         magic_damage=0,  # Will be calculated as 1.1x magic_attack
@@ -2196,7 +2196,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 9. Arcane Missiles - Multi-projectile spell
     cards.append(Card(
-        "Arcane Missiles", CardType.ACTIVE, CardClass.SPELL,
+        "Arcane Missiles", CardType.SPELL, CardClass.SPELL,
         "Fires 5 weak missiles. Cost: 25 mana, Damage: 0.5x magic attack per missile, 1.2x attack speed",
         mana_cost=25,
         magic_damage=0,  # Will be calculated as 0.5x magic_attack per missile
@@ -2206,7 +2206,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 10. Chain Lightning - AOE chain spell
     cards.append(Card(
-        "Chain Lightning", CardType.ACTIVE, CardClass.SPELL,
+        "Chain Lightning", CardType.SPELL, CardClass.SPELL,
         "Lightning that chains to all enemies. Cost: 35 mana, Damage: 1.5x magic attack (AOE), 0.9x attack speed",
         mana_cost=35,
         magic_damage=0,  # Will be calculated as 1.5x magic_attack per enemy
@@ -2216,7 +2216,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 11. Inferno - Large AOE fire spell
     cards.append(Card(
-        "Inferno", CardType.ACTIVE, CardClass.SPELL,
+        "Inferno", CardType.SPELL, CardClass.SPELL,
         "Massive fire explosion. Cost: 45 mana, Damage: 2.5x magic attack (AOE), 0.7x attack speed",
         mana_cost=45,
         magic_damage=0,  # Will be calculated as 2.5x magic_attack per enemy
@@ -2226,7 +2226,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 12. Frost Nova - AOE freeze spell
     cards.append(Card(
-        "Frost Nova", CardType.ACTIVE, CardClass.SPELL,
+        "Frost Nova", CardType.SPELL, CardClass.SPELL,
         "Freezing blast hitting all enemies. Cost: 30 mana, Damage: 1.8x magic attack (AOE), 0.8x attack speed",
         mana_cost=30,
         magic_damage=0,  # Will be calculated as 1.8x magic_attack per enemy
@@ -2236,7 +2236,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 13. Arcane Barrage - Heavy single target
     cards.append(Card(
-        "Arcane Barrage", CardType.ACTIVE, CardClass.SPELL,
+        "Arcane Barrage", CardType.SPELL, CardClass.SPELL,
         "Concentrated arcane power. Cost: 40 mana, Damage: 3x magic attack, 0.8x attack speed",
         mana_cost=40,
         magic_damage=0,  # Will be calculated as 3x magic_attack
@@ -2246,7 +2246,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 14. Flame Burst - Quick AOE
     cards.append(Card(
-        "Flame Burst", CardType.ACTIVE, CardClass.SPELL,
+        "Flame Burst", CardType.SPELL, CardClass.SPELL,
         "Quick fire burst. Cost: 18 mana, Damage: 1x magic attack (AOE), 1.1x attack speed",
         mana_cost=18,
         magic_damage=0,  # Will be calculated as 1x magic_attack per enemy
@@ -2256,7 +2256,7 @@ def create_spell_card_pool() -> List[Card]:
 
     # 15. Thunderbolt - Strong single target
     cards.append(Card(
-        "Thunderbolt", CardType.ACTIVE, CardClass.SPELL,
+        "Thunderbolt", CardType.SPELL, CardClass.SPELL,
         "Powerful lightning bolt. Cost: 28 mana, Damage: 2x magic attack, 0.9x attack speed",
         mana_cost=28,
         magic_damage=0,  # Will be calculated as 2x magic_attack
@@ -3018,6 +3018,10 @@ def main():
     num_players = int(input("Enter number of players (1-4): "))
     num_players = max(1, min(4, num_players))
 
+    # Phase 1: Get all player names/load saves
+    print("\n" + "="*60)
+    print("PLAYER SETUP")
+    print("="*60)
     players = []
     for i in range(num_players):
         # Ask if player wants to load a saved game
@@ -3037,6 +3041,17 @@ def main():
             # Create new player
             name = input(f"Enter name for Player {i+1}: ")
             player = Player(name)
+
+        players.append(player)
+
+    # Phase 2: Each player does their prep in turns
+    print("\n" + "="*60)
+    print("PREPARATION PHASE")
+    print("="*60)
+    for i, player in enumerate(players, 1):
+        print(f"\n{'='*60}")
+        print(f"PLAYER {i}: {player.name.upper()}'S TURN")
+        print(f"{'='*60}")
 
         # Check for ascension card unlocks based on level
         num_slots_needed = 0
@@ -3068,7 +3083,6 @@ def main():
         deck = shop_cards + pack_cards
 
         player.equip_deck(deck)
-        players.append(player)
 
     print("\n" + "="*60)
     print("PREP PHASE COMPLETE - ENTERING AUTO-BATTLE MODE")
