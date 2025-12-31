@@ -55,6 +55,7 @@ class Card:
     def __init__(self, name: str, card_type: CardType, card_class: CardClass, description: str,
                  hp_bonus: int = 0, attack_bonus: int = 0, defense_bonus: int = 0,
                  magic_attack_bonus: int = 0, mana_bonus: int = 0, mana_regen_bonus: int = 0,
+                 health_regen_bonus: int = 0,
                  crit_chance_bonus: float = 0.0, crit_damage_bonus: float = 0.0,
                  dodge_chance_bonus: float = 0.0, attack_speed_bonus: float = 0.0,
                  luck_bonus: int = 0, special_effect: Optional[str] = None,
@@ -77,6 +78,7 @@ class Card:
         self.magic_attack_bonus = magic_attack_bonus
         self.mana_bonus = mana_bonus
         self.mana_regen_bonus = mana_regen_bonus
+        self.health_regen_bonus = health_regen_bonus
         self.crit_chance_bonus = crit_chance_bonus  # Percentage
         self.crit_damage_bonus = crit_damage_bonus  # Multiplier addition
         self.dodge_chance_bonus = dodge_chance_bonus  # Percentage
@@ -110,6 +112,7 @@ class Player:
         self.base_magic_attack = 0
         self.base_mana = 50
         self.base_mana_regen = 10
+        self.base_health_regen = 5
         self.base_crit_chance = 5.0  # Percentage
         self.base_crit_damage = 1.5  # Multiplier (1.5 = 150% damage)
         self.base_dodge_chance = 5.0  # Percentage
@@ -125,6 +128,7 @@ class Player:
         self.max_mana = self.base_mana
         self.current_mana = self.max_mana
         self.mana_regen = self.base_mana_regen
+        self.health_regen = self.base_health_regen
         self.crit_chance = self.base_crit_chance
         self.crit_damage = self.base_crit_damage
         self.dodge_chance = self.base_dodge_chance
@@ -343,6 +347,7 @@ class Player:
         total_magic_attack_bonus = sum(card.magic_attack_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
         total_mana_bonus = sum(card.mana_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
         total_mana_regen_bonus = sum(card.mana_regen_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
+        total_health_regen_bonus = sum(card.health_regen_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
         total_crit_chance_bonus = sum(card.crit_chance_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
         total_crit_damage_bonus = sum(card.crit_damage_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
         total_dodge_chance_bonus = sum(card.dodge_chance_bonus for card in self.active_cards if card.card_class != CardClass.UNIQUE)
@@ -356,6 +361,7 @@ class Player:
         self.magic_attack = self.base_magic_attack + total_magic_attack_bonus
         self.max_mana = self.base_mana + total_mana_bonus
         self.mana_regen = self.base_mana_regen + total_mana_regen_bonus
+        self.health_regen = self.base_health_regen + total_health_regen_bonus
         self.crit_chance = self.base_crit_chance + total_crit_chance_bonus
         self.crit_damage = self.base_crit_damage + total_crit_damage_bonus
         self.dodge_chance = self.base_dodge_chance + total_dodge_chance_bonus
@@ -492,6 +498,10 @@ class Player:
     def regenerate_mana(self):
         """Regenerate mana at the start of each turn."""
         self.current_mana = min(self.current_mana + self.mana_regen, self.max_mana)
+
+    def regenerate_health(self):
+        """Regenerate health at the start of each turn."""
+        self.current_hp = min(self.current_hp + self.health_regen, self.max_hp)
 
     def has_magic_weapon(self) -> bool:
         """Check if player has a magic weapon equipped (Wand, Staff, or Tome)."""
@@ -701,6 +711,7 @@ def card_to_dict(card: Card) -> dict:
         'magic_attack_bonus': card.magic_attack_bonus,
         'mana_bonus': card.mana_bonus,
         'mana_regen_bonus': card.mana_regen_bonus,
+        'health_regen_bonus': card.health_regen_bonus,
         'crit_chance_bonus': card.crit_chance_bonus,
         'crit_damage_bonus': card.crit_damage_bonus,
         'dodge_chance_bonus': card.dodge_chance_bonus,
@@ -729,6 +740,7 @@ def dict_to_card(card_dict: dict) -> Card:
         magic_attack_bonus=card_dict['magic_attack_bonus'],
         mana_bonus=card_dict['mana_bonus'],
         mana_regen_bonus=card_dict['mana_regen_bonus'],
+        health_regen_bonus=card_dict.get('health_regen_bonus', 0),
         crit_chance_bonus=card_dict['crit_chance_bonus'],
         crit_damage_bonus=card_dict['crit_damage_bonus'],
         dodge_chance_bonus=card_dict['dodge_chance_bonus'],
@@ -1442,8 +1454,9 @@ class Combat:
             if not silent:
                 print(f"--- Turn {turn} ---")
 
-            # Regenerate mana
+            # Regenerate mana and health
             player.regenerate_mana()
+            player.regenerate_health()
             for enemy in enemies:
                 enemy.regenerate_mana()
 
@@ -1986,6 +1999,37 @@ def create_stat_card_pool() -> List[Card]:
             f"+{int(crit_dmg_value*100)}% Crit Damage, -{crit_chance_value}% Crit Chance",
             crit_damage_bonus=crit_dmg_value,
             crit_chance_bonus=-crit_chance_value
+        ))
+
+    # 26. Regeneration (Health Regen) - 4 levels
+    for level in range(1, 5):
+        regen_value = level * 2
+        cards.append(Card(
+            f"Regeneration {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{regen_value} Health Regen",
+            health_regen_bonus=regen_value
+        ))
+
+    # 27. Resilience (HP + Health Regen combo) - 4 levels
+    for level in range(1, 5):
+        hp_value = level * 15
+        regen_value = level * 1
+        cards.append(Card(
+            f"Resilience {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{hp_value} HP, +{regen_value} Health Regen",
+            hp_bonus=hp_value,
+            health_regen_bonus=regen_value
+        ))
+
+    # 28. Vampirism (Health Regen - Defense tradeoff) - 4 levels
+    for level in range(1, 5):
+        regen_value = level * 3
+        def_value = level * 3
+        cards.append(Card(
+            f"Vampirism {level}", CardType.PASSIVE, CardClass.STAT,
+            f"+{regen_value} Health Regen, -{def_value} Defense",
+            health_regen_bonus=regen_value,
+            defense_bonus=-def_value
         ))
 
     return cards
